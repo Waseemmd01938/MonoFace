@@ -13,15 +13,25 @@ import onnxruntime
 _SESSION_CACHE: Dict[Tuple[str, Tuple[str, ...]], onnxruntime.InferenceSession] = {}
 
 
+_VERIFIED_PROVIDERS: Optional[List[str]] = None
+
+
 def get_default_providers() -> List[str]:
-    """Returns available execution providers in priority order."""
+    """Returns verified and working execution providers in priority order."""
+    global _VERIFIED_PROVIDERS
+    if _VERIFIED_PROVIDERS is not None:
+        return _VERIFIED_PROVIDERS
+
     available = onnxruntime.get_available_providers()
-    providers = []
+    providers: List[str] = []
+
     if 'CUDAExecutionProvider' in available:
         providers.append('CUDAExecutionProvider')
-    if 'CPUExecutionProvider' in available:
+    if 'CPUExecutionProvider' in available or not providers:
         providers.append('CPUExecutionProvider')
-    return providers if providers else ['CPUExecutionProvider']
+
+    _VERIFIED_PROVIDERS = providers
+    return _VERIFIED_PROVIDERS
 
 
 def create_optimized_session_options() -> onnxruntime.SessionOptions:
@@ -42,7 +52,9 @@ def get_inference_session(
     """
     Retrieves a cached InferenceSession or creates and registers a new one.
     Prevents redundant model re-instantiation and memory bloat.
+    Gracefully falls back to CPU if GPU providers lack system CUDA shared libraries.
     """
+    global _VERIFIED_PROVIDERS
     if not os.path.isfile(model_path):
         raise FileNotFoundError(f"Model file not found at: {model_path}")
 
@@ -54,9 +66,20 @@ def get_inference_session(
         return _SESSION_CACHE[cache_key]
 
     opts = session_options or create_optimized_session_options()
-    session = onnxruntime.InferenceSession(model_path, sess_options=opts, providers=prov_list)
+
+    try:
+        session = onnxruntime.InferenceSession(model_path, sess_options=opts, providers=prov_list)
+    except Exception as e:
+        # If CUDA library failed to load (e.g. missing libcublasLt or CUDA mismatch), fallback to CPU
+        if 'CUDAExecutionProvider' in prov_list:
+            _VERIFIED_PROVIDERS = ['CPUExecutionProvider']
+            session = onnxruntime.InferenceSession(model_path, sess_options=opts, providers=['CPUExecutionProvider'])
+        else:
+            raise e
+
     _SESSION_CACHE[cache_key] = session
     return session
+
 
 
 def clear_session_cache() -> None:
