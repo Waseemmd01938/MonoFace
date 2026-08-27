@@ -90,6 +90,8 @@ class FaceSwapper:
         mask_types: Optional[List[str]] = None,
         mask_blur: float = 0.3,
         mask_padding: Padding = (0, 0, 0, 0),
+        mask_areas: Optional[List[str]] = None,
+        mask_regions: Optional[List[str]] = None,
         pixel_boost: Optional[str] = None,
         providers: Optional[List[str]] = None,
         model_path: Optional[str] = None
@@ -103,6 +105,8 @@ class FaceSwapper:
         self.mask_types = mask_types or ['box', 'occlusion']
         self.mask_blur = mask_blur
         self.mask_padding = mask_padding
+        self.mask_areas = mask_areas
+        self.mask_regions = mask_regions
         self.pixel_boost = pixel_boost
 
         self.providers = providers if providers is not None else get_default_providers()
@@ -178,6 +182,8 @@ class FaceSwapper:
         mask_types: Optional[List[str]] = None,
         mask_blur: Optional[float] = None,
         mask_padding: Optional[Padding] = None,
+        mask_areas: Optional[List[str]] = None,
+        mask_regions: Optional[List[str]] = None,
         pixel_boost: Optional[str] = None,
         prepared_source_embedding: Optional[Embedding] = None
     ) -> VisionFrame:
@@ -243,6 +249,8 @@ class FaceSwapper:
         m_types = mask_types if mask_types is not None else self.mask_types
         m_blur = mask_blur if mask_blur is not None else self.mask_blur
         m_pad = mask_padding if mask_padding is not None else self.mask_padding
+        m_areas = mask_areas if mask_areas is not None else self.mask_areas
+        m_regions = mask_regions if mask_regions is not None else self.mask_regions
 
         mask = self.masker.create_mask(
             swapped_crop,
@@ -250,7 +258,9 @@ class FaceSwapper:
             affine_matrix=affine_matrix,
             mask_types=m_types,
             mask_blur=m_blur,
-            mask_padding=m_pad
+            mask_padding=m_pad,
+            mask_areas=m_areas,
+            mask_regions=m_regions
         )
 
         # 5. Paste swapped crop seamlessly back onto the frame

@@ -165,8 +165,8 @@ def create_pipeline(
     mask_padding_bottom: int,
     mask_padding_left: int,
     occluder_model: str,
-    mask_regions: Optional[List[str]] = None,
-    mask_areas: Optional[List[str]] = None
+    mask_areas: Optional[List[str]] = None,
+    mask_regions: Optional[List[str]] = None
 ) -> Tuple[FaceAnalyser, FaceSwapper]:
     # Parse detector resolution
     det_w, det_h = (int(x) for x in detector_size_str.split('x'))
@@ -179,7 +179,7 @@ def create_pipeline(
         landmarker_model=landmarker_model,
         landmarker_score=landmarker_score
     )
-    # Set custom detector margins
+    # Set custom detector margins (% expansion)
     analyser.detector.margin = (margin_top, margin_right, margin_bottom, margin_left)
 
     swapper = FaceSwapper(
@@ -188,7 +188,9 @@ def create_pipeline(
         pixel_boost=pixel_boost,
         mask_types=mask_types,
         mask_blur=mask_blur,
-        mask_padding=(mask_padding_top, mask_padding_right, mask_padding_bottom, mask_padding_left)
+        mask_padding=(mask_padding_top, mask_padding_right, mask_padding_bottom, mask_padding_left),
+        mask_areas=mask_areas,
+        mask_regions=mask_regions
     )
     swapper.masker.occluder_model = occluder_model
 
@@ -243,6 +245,7 @@ def preview_swap_frame(
     mask_padding_bottom: int,
     mask_padding_left: int,
     occluder_model: str,
+    mask_areas: List[str],
     mask_regions: List[str]
 ) -> np.ndarray:
     if not source_files or not target_file:
@@ -271,6 +274,7 @@ def preview_swap_frame(
         mask_padding_bottom=mask_padding_bottom,
         mask_padding_left=mask_padding_left,
         occluder_model=occluder_model,
+        mask_areas=mask_areas,
         mask_regions=mask_regions
     )
 
@@ -301,7 +305,9 @@ def preview_swap_frame(
             source_face=source_face,
             target_face=target_face,
             target_vision_frame=result_frame,
-            pixel_boost=pixel_boost
+            pixel_boost=pixel_boost,
+            mask_areas=mask_areas,
+            mask_regions=mask_regions
         )
 
     return cv2.cvtColor(result_frame, cv2.COLOR_BGR2RGB)
@@ -340,6 +346,7 @@ def run_batch_swap(
     mask_padding_bottom: int,
     mask_padding_left: int,
     occluder_model: str,
+    mask_areas: List[str],
     mask_regions: List[str],
     progress=gr.Progress()
 ) -> Tuple[Optional[str], Optional[str], str]:
@@ -367,6 +374,7 @@ def run_batch_swap(
         mask_padding_bottom=mask_padding_bottom,
         mask_padding_left=mask_padding_left,
         occluder_model=occluder_model,
+        mask_areas=mask_areas,
         mask_regions=mask_regions
     )
 
@@ -390,7 +398,14 @@ def run_batch_swap(
 
         res = img.copy()
         for target_face in target_faces:
-            res = swapper.swap_face(source_face, target_face, res, pixel_boost=pixel_boost)
+            res = swapper.swap_face(
+                source_face,
+                target_face,
+                res,
+                pixel_boost=pixel_boost,
+                mask_areas=mask_areas,
+                mask_regions=mask_regions
+            )
 
         out_img_path = os.path.join(output_dir, f"swapped_{target_name}.png")
         cv2.imwrite(out_img_path, res)
@@ -442,7 +457,9 @@ def run_batch_swap(
                     target_face,
                     frame,
                     pixel_boost=pixel_boost,
-                    prepared_source_embedding=prepared_source_embedding
+                    prepared_source_embedding=prepared_source_embedding,
+                    mask_areas=mask_areas,
+                    mask_regions=mask_regions
                 )
 
         out_name = os.path.basename(frame_path)
@@ -661,12 +678,12 @@ with gr.Blocks(title="MonoFace Pro") as demo:
             )
 
         # Margin expansion
-        with gr.Accordion("📐 Face Detector Margins (% Expansion)", open=False):
+        with gr.Accordion("📐 Face Margins / Detector Expansion (%)", open=True):
             with gr.Row():
-                margin_top = gr.Slider(0, 100, value=0, step=1, label="Margin Top (%)")
-                margin_right = gr.Slider(0, 100, value=0, step=1, label="Margin Right (%)")
-                margin_bottom = gr.Slider(0, 100, value=0, step=1, label="Margin Bottom (%)")
-                margin_left = gr.Slider(0, 100, value=0, step=1, label="Margin Left (%)")
+                margin_top = gr.Slider(0, 100, value=0, step=1, label="Face Margin Top (%)")
+                margin_right = gr.Slider(0, 100, value=0, step=1, label="Face Margin Right (%)")
+                margin_bottom = gr.Slider(0, 100, value=0, step=1, label="Face Margin Bottom (%)")
+                margin_left = gr.Slider(0, 100, value=0, step=1, label="Face Margin Left (%)")
 
     # -------------------------------------------------------------
     # Masking & Blending Controls
@@ -675,7 +692,7 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         with gr.Row():
             mask_types = gr.CheckboxGroup(
                 choices=["box", "occlusion", "region", "area"],
-                value=["box"],
+                value=["box", "occlusion"],
                 label="Active Mask Types"
             )
             occluder_model = gr.Dropdown(
@@ -693,10 +710,15 @@ with gr.Blocks(title="MonoFace Pro") as demo:
             )
 
         with gr.Row():
+            mask_areas = gr.CheckboxGroup(
+                choices=["upper-face", "lower-face", "mouth", "eyes", "nose"],
+                value=["upper-face", "lower-face", "mouth", "eyes", "nose"],
+                label="Landmark Mask Areas (Active when 'area' mask is selected)"
+            )
             mask_regions = gr.CheckboxGroup(
                 choices=["skin", "left-eyebrow", "right-eyebrow", "left-eye", "right-eye", "nose", "mouth", "upper-lip", "lower-lip"],
                 value=["skin", "left-eyebrow", "right-eyebrow", "left-eye", "right-eye", "nose", "mouth", "upper-lip", "lower-lip"],
-                label="Semantic Mask Regions (When 'region' mask is enabled)"
+                label="Semantic Mask Regions (Active when 'region' mask is selected)"
             )
 
         with gr.Accordion("✂️ Face Mask Padding (% Cut)", open=False):
@@ -768,6 +790,7 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         mask_padding_bottom,
         mask_padding_left,
         occluder_model,
+        mask_areas,
         mask_regions
     ]
 
