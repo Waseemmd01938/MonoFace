@@ -672,9 +672,9 @@ with gr.Blocks(title="MonoFace Pro") as demo:
             landmarker_score = gr.Slider(
                 minimum=0.0,
                 maximum=1.0,
-                value=0.5,
+                value=0.0,
                 step=0.05,
-                label="Landmarker Score Threshold (0.0 = Fast 5-pt detector)"
+                label="Landmarker Score Threshold (0.0 = Ultra-Fast 5-pt detector)"
             )
 
         # Margin expansion
@@ -692,7 +692,7 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         with gr.Row():
             mask_types = gr.CheckboxGroup(
                 choices=["box", "occlusion", "region", "area"],
-                value=["box", "occlusion"],
+                value=["box"],
                 label="Active Mask Types"
             )
             occluder_model = gr.Dropdown(

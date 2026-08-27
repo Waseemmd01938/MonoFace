@@ -143,7 +143,8 @@ class FaceDetector:
 
     def _detect_single_frame(self, vision_frame: VisionFrame) -> Tuple[List[BoundingBox], List[Score], List[FaceLandmark5]]:
         margin_top, margin_right, margin_bottom, margin_left = self._prepare_margin(vision_frame)
-        padded_frame = np.pad(vision_frame, ((margin_top, margin_bottom), (margin_left, margin_right), (0, 0)))
+        has_margin = margin_top > 0 or margin_right > 0 or margin_bottom > 0 or margin_left > 0
+        padded_frame = np.pad(vision_frame, ((margin_top, margin_bottom), (margin_left, margin_right), (0, 0))) if has_margin else vision_frame
 
         if self.model_name == 'yolo_face':
             bboxes, scores, landmarks = self._detect_with_yolo_face(padded_frame)
@@ -156,12 +157,15 @@ class FaceDetector:
         else:
             bboxes, scores, landmarks = [], [], []
 
-        # Remove margin offset
-        offset_box = np.array([margin_left, margin_top, margin_left, margin_top])
-        offset_lm = np.array([margin_left, margin_top])
+        if has_margin:
+            # Remove margin offset
+            offset_box = np.array([margin_left, margin_top, margin_left, margin_top])
+            offset_lm = np.array([margin_left, margin_top])
+            bboxes = [normalize_bounding_box(b) - offset_box for b in bboxes]
+            landmarks = [lm - offset_lm for lm in landmarks]
+        else:
+            bboxes = [normalize_bounding_box(b) for b in bboxes]
 
-        bboxes = [normalize_bounding_box(b) - offset_box for b in bboxes]
-        landmarks = [lm - offset_lm for lm in landmarks]
         return bboxes, scores, landmarks
 
     def _prepare_margin(self, vision_frame: VisionFrame) -> Tuple[int, int, int, int]:

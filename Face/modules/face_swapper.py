@@ -12,7 +12,7 @@ from Face.modules.face_helper import (
     implode_pixel_boost,
     explode_pixel_boost
 )
-from Face.modules.face_masker import FaceMasker
+from Face.modules.face_masker import FaceMasker, create_box_mask
 from Face.modules.model_store import get_inference_session, get_default_providers
 from downloads import download_model
 
@@ -249,19 +249,22 @@ class FaceSwapper:
         m_types = mask_types if mask_types is not None else self.mask_types
         m_blur = mask_blur if mask_blur is not None else self.mask_blur
         m_pad = mask_padding if mask_padding is not None else self.mask_padding
-        m_areas = mask_areas if mask_areas is not None else self.mask_areas
-        m_regions = mask_regions if mask_regions is not None else self.mask_regions
 
-        mask = self.masker.create_mask(
-            swapped_crop,
-            target_face=target_face,
-            affine_matrix=affine_matrix,
-            mask_types=m_types,
-            mask_blur=m_blur,
-            mask_padding=m_pad,
-            mask_areas=m_areas,
-            mask_regions=m_regions
-        )
+        if m_types == ['box'] or m_types == ('box',):
+            mask = create_box_mask(swapped_crop, m_blur, m_pad)
+        else:
+            m_areas = mask_areas if mask_areas is not None else self.mask_areas
+            m_regions = mask_regions if mask_regions is not None else self.mask_regions
+            mask = self.masker.create_mask(
+                swapped_crop,
+                target_face=target_face,
+                affine_matrix=affine_matrix,
+                mask_types=m_types,
+                mask_blur=m_blur,
+                mask_padding=m_pad,
+                mask_areas=m_areas,
+                mask_regions=m_regions
+            )
 
         # 5. Paste swapped crop seamlessly back onto the frame
         result_frame = paste_back(
