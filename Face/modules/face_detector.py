@@ -21,7 +21,10 @@ from Face.modules.face_helper import (
     ensure_model_exists
 )
 
+from Face.modules.model_store import get_inference_session, get_default_providers
+
 MODEL_CONFIGS = {
+
     'yolo_face': {
         'file': 'yoloface_8n.onnx',
         'tag': 'models-3.0.0',
@@ -71,15 +74,16 @@ class FaceDetector:
         self.angles = angles or [0]
         self.margin = margin
 
-        if providers is None:
-            available = onnxruntime.get_available_providers()
-            self.providers = [p for p in ['CUDAExecutionProvider', 'CPUExecutionProvider'] if p in available] or ['CPUExecutionProvider']
-        else:
-            self.providers = providers
+        self.providers = providers if providers is not None else get_default_providers()
 
         cfg = MODEL_CONFIGS[self.model_name]
         self.model_file = model_path or ensure_model_exists(cfg['file'], cfg['tag'])
-        self.session = onnxruntime.InferenceSession(self.model_file, providers=self.providers)
+        self.session = get_inference_session(self.model_file, providers=self.providers)
+
+    def preload(self) -> None:
+        """Warms up the detector session."""
+        _ = self.session.get_inputs()
+
 
     def detect(self, vision_frame: VisionFrame) -> List[Dict[str, Any]]:
         """

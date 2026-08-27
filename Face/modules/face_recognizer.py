@@ -12,6 +12,8 @@ from Face.modules.face_helper import (
     ensure_model_exists
 )
 
+from Face.modules.model_store import get_inference_session, get_default_providers
+
 Embedding = np.ndarray
 
 RECOGNIZER_CONFIG = {
@@ -39,14 +41,14 @@ class FaceRecognizer:
         self.template = self.cfg['template']
         self.size = self.cfg['size']
 
-        if providers is None:
-            available = onnxruntime.get_available_providers()
-            self.providers = [p for p in ['CUDAExecutionProvider', 'CPUExecutionProvider'] if p in available] or ['CPUExecutionProvider']
-        else:
-            self.providers = providers
-
+        self.providers = providers if providers is not None else get_default_providers()
         self.model_file = model_path or ensure_model_exists(self.cfg['file'], self.cfg['tag'])
-        self.session = onnxruntime.InferenceSession(self.model_file, providers=self.providers)
+        self.session = get_inference_session(self.model_file, providers=self.providers)
+
+    def preload(self) -> None:
+        """Warms up recognizer session."""
+        _ = self.session.get_inputs()
+
 
     def get_embedding(
         self,

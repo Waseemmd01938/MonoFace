@@ -6,12 +6,13 @@ from Face.modules import (
     FaceRecognizer,
     calculate_face_embedding,
     compare_faces,
-    FaceClassifier,
-    classify_face,
     FaceMasker,
     create_box_mask,
     FaceSwapper,
-    swap_face
+    swap_face,
+    get_inference_session,
+    clear_session_cache,
+    free_memory
 )
 
 __all__ = [
@@ -22,10 +23,12 @@ __all__ = [
     'FaceRecognizer',
     'calculate_face_embedding',
     'compare_faces',
-    'FaceClassifier',
-    'classify_face',
     'FaceMasker',
     'create_box_mask',
     'FaceSwapper',
-    'swap_face'
+    'swap_face',
+    'get_inference_session',
+    'clear_session_cache',
+    'free_memory'
 ]
+

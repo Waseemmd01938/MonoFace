@@ -10,10 +10,28 @@ import shutil
 import glob
 from typing import List, Optional, Tuple, Dict, Any
 
-from face_analyser import FaceAnalyser, get_many_faces, get_average_face
-from Face.modules import FaceSwapper, FaceDetector, FaceLandmarker, FaceMasker
+from face_analyser import (
+    FaceAnalyser,
+    get_many_faces,
+    get_average_face,
+    clear_face_cache,
+    clear_analyser_memory,
+    preload_face_analyser
+)
+from Face.modules import (
+    FaceSwapper,
+    FaceDetector,
+    FaceLandmarker,
+    FaceMasker,
+    get_inference_session,
+    clear_session_cache,
+    free_memory
+)
 from Face.typing import Face, VisionFrame, Padding
 from downloads import is_model_downloaded, download_model
+
+# Cached pipeline instance to avoid repeated object recreation
+_CACHED_PIPELINE: Dict[str, Any] = {}
 
 # -----------------------------------------
 # 1) System Helpers & Audio/Video FFmpeg
@@ -451,7 +469,7 @@ def run_batch_swap(
     ]
     subprocess.run(cmd_audio)
 
-    # Cleanup temp frames
+    # Cleanup temp frames and clear memory
     try:
         shutil.rmtree(temp_dir)
         shutil.rmtree(swapped_dir)
@@ -460,12 +478,16 @@ def run_batch_swap(
     except Exception:
         pass
 
+    clear_face_cache()
+    free_memory()
+
     total_time = time.time() - start_time
     avg_fps = total_frames / max(total_time, 0.001)
     status_msg = f"✅ Done! Processed {total_frames} frames in {total_time:.1f}s (Average: {avg_fps:.2f} FPS)."
     print(status_msg)
 
     return None, final_video, status_msg
+
 
 
 # -----------------------------------------
@@ -768,4 +790,12 @@ if __name__ == "__main__":
     print(f"🔥 Active ONNX Runtime Execution Providers: {providers}")
     if "CUDAExecutionProvider" not in providers:
         print("⚠️ Warning: CUDAExecutionProvider not detected! Running on CPU. For 10-30x faster GPU inference, install: pip install onnxruntime-gpu")
-    demo.launch(share=True, inbrowser=True, theme=theme, css=custom_css)
+    
+    print("⏳ Preloading face analyser models (Detector, Landmarker, Fan 68/5, Recognizer)...")
+    try:
+        preload_face_analyser()
+        print("✅ Face analyser models preloaded successfully!")
+    except Exception as e:
+        print(f"⚠️ Note: Face analyser models will load on first inference ({e})")
+
+    demo.launch(share=True, inbrowser=True, theme=theme, css=custom_css)

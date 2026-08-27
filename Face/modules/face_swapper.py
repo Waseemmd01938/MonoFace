@@ -13,9 +13,13 @@ from Face.modules.face_helper import (
     explode_pixel_boost
 )
 from Face.modules.face_masker import FaceMasker
+from Face.modules.model_store import get_inference_session, get_default_providers
 from downloads import download_model
 
+_INITIALIZER_CACHE: Dict[str, np.ndarray] = {}
+
 SWAPPER_CONFIGS: Dict[str, Dict[str, Any]] = {
+
     'inswapper_128': {
         'file': 'inswapper_128.onnx',
         'type': 'inswapper',
@@ -101,26 +105,26 @@ class FaceSwapper:
         self.mask_padding = mask_padding
         self.pixel_boost = pixel_boost
 
-        if providers is None:
-            available = onnxruntime.get_available_providers()
-            self.providers = [p for p in ['CUDAExecutionProvider', 'CPUExecutionProvider'] if p in available] or ['CPUExecutionProvider']
-        else:
-            self.providers = providers
-
+        self.providers = providers if providers is not None else get_default_providers()
         self.model_file = model_path or download_model(self.model_name)
-        self.session = onnxruntime.InferenceSession(self.model_file, providers=self.providers)
+        self.session = get_inference_session(self.model_file, providers=self.providers)
 
         # Inswapper projection matrix initializer
         self.initializer: Optional[np.ndarray] = None
         if self.cfg['type'] == 'inswapper':
-            try:
-                onnx_model = onnx.load(self.model_file)
-                self.initializer = onnx.numpy_helper.to_array(onnx_model.graph.initializer[-1])
-            except Exception:
-                pass
+            if self.model_file in _INITIALIZER_CACHE:
+                self.initializer = _INITIALIZER_CACHE[self.model_file]
+            else:
+                try:
+                    onnx_model = onnx.load(self.model_file)
+                    self.initializer = onnx.numpy_helper.to_array(onnx_model.graph.initializer[-1])
+                    _INITIALIZER_CACHE[self.model_file] = self.initializer
+                except Exception:
+                    pass
 
         # Face Masker instance
         self.masker = FaceMasker(providers=self.providers)
+
 
     def prepare_source_embedding(self, source_face: Face) -> Embedding:
         """Transforms source face embedding according to swapper model requirements."""

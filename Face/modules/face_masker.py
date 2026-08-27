@@ -5,9 +5,12 @@ import numpy as np
 import onnxruntime
 
 from Face.typing import Mask, VisionFrame, FaceLandmark68, Padding, Face
+from Face.modules.model_store import get_inference_session, get_default_providers
 from downloads import download_model
 
+
 OCCLUSION_MODELS = {
+
     'face_occluder': {
         'file': 'face_occluder.onnx',
         'size': (256, 256)
@@ -111,31 +114,18 @@ class FaceMasker:
         parser_model: str = 'bisenet_resnet_34',
         providers: Optional[List[str]] = None
     ):
-        if providers is None:
-            available = onnxruntime.get_available_providers()
-            self.providers = [p for p in ['CUDAExecutionProvider', 'CPUExecutionProvider'] if p in available] or ['CPUExecutionProvider']
-        else:
-            self.providers = providers
-
+        self.providers = providers if providers is not None else get_default_providers()
         self.occluder_model = occluder_model
         self.parser_model = parser_model
 
-        self._occluder_session: Optional[onnxruntime.InferenceSession] = None
-        self._parser_session: Optional[onnxruntime.InferenceSession] = None
-
     def _get_occluder_session(self) -> onnxruntime.InferenceSession:
-        if self._occluder_session is None:
-            cfg = OCCLUSION_MODELS.get(self.occluder_model, OCCLUSION_MODELS['face_occluder'])
-            model_path = download_model(self.occluder_model)
-            self._occluder_session = onnxruntime.InferenceSession(model_path, providers=self.providers)
-        return self._occluder_session
+        model_path = download_model(self.occluder_model)
+        return get_inference_session(model_path, providers=self.providers)
 
     def _get_parser_session(self) -> onnxruntime.InferenceSession:
-        if self._parser_session is None:
-            cfg = PARSER_MODELS.get(self.parser_model, PARSER_MODELS['bisenet_resnet_34'])
-            model_path = download_model(self.parser_model)
-            self._parser_session = onnxruntime.InferenceSession(model_path, providers=self.providers)
-        return self._parser_session
+        model_path = download_model(self.parser_model)
+        return get_inference_session(model_path, providers=self.providers)
+
 
     def create_occlusion_mask(self, crop_vision_frame: VisionFrame) -> Mask:
         """

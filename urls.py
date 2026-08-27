@@ -121,19 +121,6 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
 
     # -------------------------------------------------------------
-    # 4. Face Classifiers (Gender, Age, Race)
-    # -------------------------------------------------------------
-    'fairface': {
-        'category': 'face_classifier',
-        'file': 'fairface.onnx',
-        'hash_file': 'fairface.hash',
-        'tag': 'models-3.0.0',
-        'template': 'arcface_112_v2',
-        'size': (224, 224),
-        'vendor': 'dchen236'
-    },
-
-    # -------------------------------------------------------------
     # 5. Face Maskers & Occlusion
     # -------------------------------------------------------------
     'face_occluder': {

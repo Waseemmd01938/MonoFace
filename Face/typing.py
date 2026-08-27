@@ -41,7 +41,8 @@ Face = namedtuple('Face', [
     'gender',
     'age',
     'race'
-])
+], defaults=(None, None, None))
+
 
 FaceSet: TypeAlias = Dict[str, List[Face]]
 FaceStore = TypedDict('FaceStore', {

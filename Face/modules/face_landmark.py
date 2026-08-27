@@ -21,8 +21,10 @@ from Face.modules.face_helper import (
     estimate_face_angle,
     ensure_model_exists
 )
+from Face.modules.model_store import get_inference_session, get_default_providers
 
 LANDMARK_MODELS = {
+
     '2dfan4': {
         'file': '2dfan4.onnx',
         'tag': 'models-3.0.0',
@@ -51,18 +53,22 @@ class FaceLandmarker:
         if self.model_name not in LANDMARK_MODELS:
             raise ValueError(f"Unsupported landmarker model: {model_name}. Supported: {list(LANDMARK_MODELS.keys())}")
 
-        if providers is None:
-            available = onnxruntime.get_available_providers()
-            self.providers = [p for p in ['CUDAExecutionProvider', 'CPUExecutionProvider'] if p in available] or ['CPUExecutionProvider']
-        else:
-            self.providers = providers
+        self.providers = providers if providers is not None else get_default_providers()
 
         cfg = LANDMARK_MODELS[self.model_name]
         self.model_file = model_path or ensure_model_exists(cfg['file'], cfg['tag'])
-        self.session = onnxruntime.InferenceSession(self.model_file, providers=self.providers)
+        self.session = get_inference_session(self.model_file, providers=self.providers)
 
-        # Optional fan_68_5 session for 5-pt to 68-pt direct conversion
-        self._fan_68_5_session: Optional[onnxruntime.InferenceSession] = None
+        # Preload fan_68_5 session upfront for instant landmark conversion
+        fan_cfg = LANDMARK_MODELS['fan_68_5']
+        fan_path = ensure_model_exists(fan_cfg['file'], fan_cfg['tag'])
+        self._fan_68_5_session: onnxruntime.InferenceSession = get_inference_session(fan_path, providers=self.providers)
+
+    def preload(self) -> None:
+        """Warms up landmark and fan_68_5 sessions."""
+        _ = self.session.get_inputs()
+        _ = self._fan_68_5_session.get_inputs()
+
 
     def detect_landmarks(
         self,
@@ -150,11 +156,8 @@ class FaceLandmarker:
         return face_landmark_68, score_normalized
 
     def estimate_landmark_68_from_5(self, face_landmark_5: FaceLandmark5) -> FaceLandmark68:
-        """Estimates full 68-point landmarks given 5-point face landmarks using fan_68_5 model."""
-        if self._fan_68_5_session is None:
-            cfg = LANDMARK_MODELS['fan_68_5']
-            fan_path = ensure_model_exists(cfg['file'], cfg['tag'])
-            self._fan_68_5_session = onnxruntime.InferenceSession(fan_path, providers=self.providers)
+        """Estimates full 68-point landmarks given 5-point face landmarks using preloaded fan_68_5 model."""
+
 
         affine_matrix = estimate_matrix_by_face_landmark_5(face_landmark_5, 'ffhq_512', (1, 1))
         norm_landmark_5 = cv2.transform(face_landmark_5.reshape(1, -1, 2).astype(np.float32), affine_matrix).reshape(-1, 2)

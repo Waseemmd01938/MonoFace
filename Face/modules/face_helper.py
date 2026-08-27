@@ -88,13 +88,13 @@ def ensure_model_exists(file_name: str, download_tag: str = 'models-3.0.0', mode
 
     for url in urls:
         try:
-            print(f"Downloading model {file_name} from {url}...")
+            print(f"Downloading model {file_name}")
             urllib.request.urlretrieve(url, model_path)
             if os.path.isfile(model_path) and os.path.getsize(model_path) > 1024:
                 print(f"Successfully downloaded {file_name}")
                 return model_path
         except Exception as e:
-            print(f"Failed to download from {url}: {e}")
+            print(f"Failed to download {file_name}: {e}")
 
     if not (os.path.isfile(model_path) and os.path.getsize(model_path) > 1024):
         # Also check relative facefusion repository if available locally

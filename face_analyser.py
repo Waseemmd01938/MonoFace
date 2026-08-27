@@ -1,6 +1,7 @@
 """
 Face Analyser Module for MonoFace
-Coordinates Face Detection, Landmarking, Recognition, and Classification pipelines.
+Coordinates Face Detection, Landmarking, and Recognition pipelines.
+Preloads models upfront and optimizes memory management for maximum performance.
 """
 
 from typing import Dict, List, Optional, Sequence, Tuple, Union
@@ -30,21 +31,28 @@ from Face.modules.face_helper import (
 from Face.modules.face_detector import FaceDetector
 from Face.modules.face_landmark import FaceLandmarker
 from Face.modules.face_recognizer import FaceRecognizer
-from Face.modules.face_classifier import classify_face
+from Face.modules.model_store import clear_session_cache, free_memory
 
-# In-memory static cache for detected faces
+# In-memory static cache for detected faces (capped for memory bounds)
 _FACE_CACHE: Dict[int, List[Face]] = {}
+_MAX_FACE_CACHE_ENTRIES = 512
 
 
 def get_static_faces(vision_frame: VisionFrame) -> Optional[List[Face]]:
     """Retrieves cached faces for a given frame."""
-    frame_hash = hash(vision_frame.tobytes()[::1000]) if vision_frame.size > 0 else 0
+    if vision_frame is None or vision_frame.size == 0:
+        return None
+    frame_hash = hash(vision_frame.tobytes()[::1000])
     return _FACE_CACHE.get(frame_hash)
 
 
 def set_static_faces(vision_frame: VisionFrame, faces: List[Face]) -> None:
-    """Caches extracted faces for a given frame."""
-    frame_hash = hash(vision_frame.tobytes()[::1000]) if vision_frame.size > 0 else 0
+    """Caches extracted faces for a given frame with bounded capacity."""
+    if vision_frame is None or vision_frame.size == 0:
+        return
+    if len(_FACE_CACHE) >= _MAX_FACE_CACHE_ENTRIES:
+        _FACE_CACHE.clear()
+    frame_hash = hash(vision_frame.tobytes()[::1000])
     _FACE_CACHE[frame_hash] = faces
 
 
@@ -53,9 +61,17 @@ def clear_face_cache() -> None:
     _FACE_CACHE.clear()
 
 
+def clear_analyser_memory() -> None:
+    """Clears all analyser caches, model sessions, and invokes memory reclamation."""
+    clear_face_cache()
+    clear_session_cache()
+    free_memory()
+
+
 class FaceAnalyser:
     """
     Unified high-level Face Analyser pipeline.
+    Preloads all sub-module models (Detector, Landmarker, Fan 68/5, Recognizer) upfront.
     """
     def __init__(
         self,
@@ -64,16 +80,17 @@ class FaceAnalyser:
         landmarker_model: str = '2dfan4',
         landmarker_score: float = 0.5,
         recognizer_model: str = 'arcface',
-        classifier_model: Optional[str] = None,
         detector_size: Tuple[int, int] = (640, 640),
         detector_angles: Optional[List[Angle]] = None,
-        providers: Optional[List[str]] = None
+        providers: Optional[List[str]] = None,
+        preload_models: bool = True
     ):
         self.detector_score = detector_score
         self.landmarker_score = landmarker_score
         self.detector_angles = detector_angles or [0]
+        self.providers = providers
 
-        # Initialize sub-modules
+        # Initialize sub-modules (all models use shared session caching)
         self.detector = FaceDetector(
             model_name=detector_model,
             score_threshold=detector_score,
@@ -89,7 +106,16 @@ class FaceAnalyser:
             model_name=recognizer_model,
             providers=providers
         )
-        self.classifier_model = classifier_model
+
+        # Preload all face analyser models upfront for instant inference
+        if preload_models:
+            self.preload()
+
+    def preload(self) -> None:
+        """Preloads and warms up all face analyser models (Detector, Landmarker, Fan 68/5, Recognizer)."""
+        self.detector.preload()
+        self.landmarker.preload()
+        self.recognizer.preload()
 
     def get_many_faces(self, vision_frames: List[VisionFrame]) -> List[Face]:
         """Analyzes a list of image frames and extracts all detected and aligned faces."""
@@ -129,7 +155,7 @@ class FaceAnalyser:
     ) -> List[Face]:
         """
         Creates structured Face objects with complete 5-point, 68-point landmarks,
-        ArcFace embeddings, and optional demographic classifications.
+        and ArcFace identity embeddings.
         """
         faces: List[Face] = []
 
@@ -166,14 +192,6 @@ class FaceAnalyser:
             # Extract 512-D ArcFace embedding
             raw_emb, norm_emb, _, _ = self.recognizer.get_embedding(vision_frame, landmark_set['5/68'])
 
-            # Classify gender, age, race only if explicitly requested or configured
-            gender, age, race = None, None, None
-            if classify or self.classifier_model:
-                try:
-                    gender, age, race = classify_face(vision_frame, landmark_set['5/68'])
-                except Exception:
-                    pass
-
             faces.append(Face(
                 bounding_box=bbox,
                 score_set=score_set,
@@ -181,9 +199,9 @@ class FaceAnalyser:
                 angle=face_angle,
                 embedding=raw_emb,
                 embedding_norm=norm_emb,
-                gender=gender,
-                age=age,
-                race=race
+                gender=None,
+                age=None,
+                race=None
             ))
 
         return faces
@@ -215,9 +233,9 @@ class FaceAnalyser:
             angle=first_face.angle,
             embedding=avg_raw.astype(np.float32),
             embedding_norm=avg_norm.astype(np.float32),
-            gender=first_face.gender,
-            age=first_face.age,
-            race=first_face.race
+            gender=None,
+            age=None,
+            race=None
         )
 
     def find_similar_faces(
@@ -236,14 +254,33 @@ class FaceAnalyser:
         return matches
 
 
-# Functional API for compatibility
+# Functional API and singleton/caching for compatibility
 _GLOBAL_ANALYSER: Optional[FaceAnalyser] = None
 
 
 def get_analyser() -> FaceAnalyser:
+    """Retrieves or initializes global singleton FaceAnalyser."""
     global _GLOBAL_ANALYSER
     if _GLOBAL_ANALYSER is None:
         _GLOBAL_ANALYSER = FaceAnalyser()
+    return _GLOBAL_ANALYSER
+
+
+def preload_face_analyser(
+    detector_model: str = 'yolo_face',
+    landmarker_model: str = '2dfan4',
+    recognizer_model: str = 'arcface',
+    providers: Optional[List[str]] = None
+) -> FaceAnalyser:
+    """Preloads all face analyser models upfront for instant readiness."""
+    global _GLOBAL_ANALYSER
+    _GLOBAL_ANALYSER = FaceAnalyser(
+        detector_model=detector_model,
+        landmarker_model=landmarker_model,
+        recognizer_model=recognizer_model,
+        providers=providers,
+        preload_models=True
+    )
     return _GLOBAL_ANALYSER
 
 
