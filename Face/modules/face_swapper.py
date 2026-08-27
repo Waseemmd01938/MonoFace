@@ -145,7 +145,7 @@ class FaceSwapper:
 
     def balance_embedding(self, source_embedding: Embedding, target_face: Face) -> Embedding:
         """Balances source identity with target face features based on weight."""
-        if self.weight == 0.5:
+        if self.weight == 0.5 or target_face.embedding_norm is None:
             return source_embedding
 
         weight_factor = float(np.interp(self.weight, [0.0, 1.0], [0.35, -0.35]))
@@ -178,7 +178,8 @@ class FaceSwapper:
         mask_types: Optional[List[str]] = None,
         mask_blur: Optional[float] = None,
         mask_padding: Optional[Padding] = None,
-        pixel_boost: Optional[str] = None
+        pixel_boost: Optional[str] = None,
+        prepared_source_embedding: Optional[Embedding] = None
     ) -> VisionFrame:
         """
         Swaps a target face in the frame with identity from source_face.
@@ -206,9 +207,11 @@ class FaceSwapper:
             pixel_boost_size
         )
 
-        # 2. Prepare source embedding
-        source_embedding = self.prepare_source_embedding(source_face)
-        source_embedding = self.balance_embedding(source_embedding, target_face)
+        # 2. Prepare source embedding (reuse precomputed embedding for video performance)
+        source_embedding = prepared_source_embedding if prepared_source_embedding is not None else self.prepare_source_embedding(source_face)
+        if self.weight != 0.5 and target_face.embedding_norm is not None:
+            source_embedding = self.balance_embedding(source_embedding, target_face)
+
 
         # 3. Swap inference (with Pixel Boost if total > 1)
         if pixel_boost_total > 1:

@@ -429,14 +429,21 @@ def run_batch_swap(
 
     print(f"🚀 Processing {total_frames} frames using {swapper_model} (Pixel Boost: {pixel_boost})...")
     start_time = time.time()
+    prepared_source_embedding = swapper.prepare_source_embedding(source_face)
 
     for idx, frame_path in enumerate(frame_files):
         frame = cv2.imread(frame_path)
-        target_faces = analyser.get_many_faces([frame])
+        target_faces = analyser.get_many_faces([frame], extract_embedding=False)
 
         if target_faces:
             for target_face in target_faces:
-                frame = swapper.swap_face(source_face, target_face, frame, pixel_boost=pixel_boost)
+                frame = swapper.swap_face(
+                    source_face,
+                    target_face,
+                    frame,
+                    pixel_boost=pixel_boost,
+                    prepared_source_embedding=prepared_source_embedding
+                )
 
         out_name = os.path.basename(frame_path)
         cv2.imwrite(os.path.join(swapped_dir, out_name), frame)
@@ -447,6 +454,7 @@ def run_batch_swap(
             ratio = (idx + 1) / total_frames
             progress(0.15 + (0.75 * ratio), desc=f"Swapping: {idx+1}/{total_frames} [{current_fps:.1f} FPS]")
             print(f"⚡ Frame {idx+1}/{total_frames} | Speed: {current_fps:.2f} FPS")
+
 
     # Stitch video back
     progress(0.92, desc="Stitching frames with FFmpeg...")

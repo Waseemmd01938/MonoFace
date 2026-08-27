@@ -4,7 +4,7 @@ Provides centralized ONNX Runtime session pooling, optimal memory configurations
 and cache deallocation helpers.
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import gc
 import os
 import onnxruntime
@@ -34,6 +34,13 @@ def get_default_providers() -> List[str]:
     return _VERIFIED_PROVIDERS
 
 
+CUDA_PROVIDER_OPTIONS = {
+    'arena_extend_strategy': 'kNextPowerOfTwo',
+    'cudnn_conv_algo_search': 'DEFAULT',
+    'do_copy_in_default_stream': True,
+}
+
+
 def create_optimized_session_options() -> onnxruntime.SessionOptions:
     """Creates ONNX Runtime SessionOptions configured for optimal memory and speed."""
     opts = onnxruntime.SessionOptions()
@@ -41,7 +48,19 @@ def create_optimized_session_options() -> onnxruntime.SessionOptions:
     opts.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
     opts.enable_mem_pattern = True
     opts.enable_cpu_mem_arena = True
+    opts.log_severity_level = 3  # Suppress internal memcpy/graph warnings
     return opts
+
+
+def _format_providers(prov_list: List[str]) -> List[Any]:
+    """Formats provider list with high-performance CUDA provider options."""
+    formatted = []
+    for p in prov_list:
+        if p == 'CUDAExecutionProvider':
+            formatted.append(('CUDAExecutionProvider', CUDA_PROVIDER_OPTIONS))
+        else:
+            formatted.append(p)
+    return formatted
 
 
 def get_inference_session(
@@ -66,9 +85,10 @@ def get_inference_session(
         return _SESSION_CACHE[cache_key]
 
     opts = session_options or create_optimized_session_options()
+    formatted_providers = _format_providers(prov_list)
 
     try:
-        session = onnxruntime.InferenceSession(model_path, sess_options=opts, providers=prov_list)
+        session = onnxruntime.InferenceSession(model_path, sess_options=opts, providers=formatted_providers)
     except Exception as e:
         # If CUDA library failed to load (e.g. missing libcublasLt or CUDA mismatch), fallback to CPU
         if 'CUDAExecutionProvider' in prov_list:
@@ -79,6 +99,7 @@ def get_inference_session(
 
     _SESSION_CACHE[cache_key] = session
     return session
+
 
 
 

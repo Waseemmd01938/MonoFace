@@ -117,7 +117,7 @@ class FaceAnalyser:
         self.landmarker.preload()
         self.recognizer.preload()
 
-    def get_many_faces(self, vision_frames: List[VisionFrame]) -> List[Face]:
+    def get_many_faces(self, vision_frames: List[VisionFrame], extract_embedding: bool = True) -> List[Face]:
         """Analyzes a list of image frames and extracts all detected and aligned faces."""
         many_faces: List[Face] = []
 
@@ -138,7 +138,7 @@ class FaceAnalyser:
             face_scores = [d['score'] for d in detections]
             face_landmarks_5 = [d['landmark_5'] for d in detections]
 
-            faces = self.create_faces(vision_frame, bounding_boxes, face_scores, face_landmarks_5)
+            faces = self.create_faces(vision_frame, bounding_boxes, face_scores, face_landmarks_5, extract_embedding=extract_embedding)
             if faces:
                 many_faces.extend(faces)
                 set_static_faces(vision_frame, faces)
@@ -151,11 +151,12 @@ class FaceAnalyser:
         bounding_boxes: List[BoundingBox],
         face_scores: List[Score],
         face_landmarks_5: List[FaceLandmark5],
+        extract_embedding: bool = True,
         classify: bool = False
     ) -> List[Face]:
         """
         Creates structured Face objects with complete 5-point, 68-point landmarks,
-        and ArcFace identity embeddings.
+        and optional ArcFace identity embeddings.
         """
         faces: List[Face] = []
 
@@ -189,8 +190,11 @@ class FaceAnalyser:
                 'landmarker': float(lm_score_68)
             }
 
-            # Extract 512-D ArcFace embedding
-            raw_emb, norm_emb, _, _ = self.recognizer.get_embedding(vision_frame, landmark_set['5/68'])
+            # Extract 512-D ArcFace embedding only when requested
+            if extract_embedding:
+                raw_emb, norm_emb, _, _ = self.recognizer.get_embedding(vision_frame, landmark_set['5/68'])
+            else:
+                raw_emb, norm_emb = None, None
 
             faces.append(Face(
                 bounding_box=bbox,
@@ -205,6 +209,7 @@ class FaceAnalyser:
             ))
 
         return faces
+
 
     def get_one_face(self, faces: List[Face], position: int = 0) -> Optional[Face]:
         """Retrieves a single face by index from a list of faces."""
