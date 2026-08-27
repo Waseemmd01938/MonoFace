@@ -1,0 +1,271 @@
+from typing import Dict, List, Optional, Tuple, Union, Any
+import os
+import cv2
+import numpy as np
+import onnx
+import onnxruntime
+
+from Face.typing import Face, VisionFrame, Mask, Embedding, Padding
+from Face.modules.face_helper import (
+    warp_face_by_face_landmark_5,
+    paste_back,
+    implode_pixel_boost,
+    explode_pixel_boost
+)
+from Face.modules.face_masker import FaceMasker
+from downloads import download_model
+
+SWAPPER_CONFIGS: Dict[str, Dict[str, Any]] = {
+    'inswapper_128': {
+        'file': 'inswapper_128.onnx',
+        'type': 'inswapper',
+        'template': 'arcface_128',
+        'size': (128, 128),
+        'mean': [0.0, 0.0, 0.0],
+        'std': [1.0, 1.0, 1.0]
+    },
+    'inswapper_128_fp16': {
+        'file': 'inswapper_128_fp16.onnx',
+        'type': 'inswapper',
+        'template': 'arcface_128',
+        'size': (128, 128),
+        'mean': [0.0, 0.0, 0.0],
+        'std': [1.0, 1.0, 1.0]
+    },
+    'hyperswap_1a_256': {
+        'file': 'hyperswap_1a_256.onnx',
+        'type': 'hyperswap',
+        'template': 'arcface_128',
+        'size': (256, 256),
+        'mean': [0.5, 0.5, 0.5],
+        'std': [0.5, 0.5, 0.5]
+    },
+    'hyperswap_1b_256': {
+        'file': 'hyperswap_1b_256.onnx',
+        'type': 'hyperswap',
+        'template': 'arcface_128',
+        'size': (256, 256),
+        'mean': [0.5, 0.5, 0.5],
+        'std': [0.5, 0.5, 0.5]
+    },
+    'hyperswap_1c_256': {
+        'file': 'hyperswap_1c_256.onnx',
+        'type': 'hyperswap',
+        'template': 'arcface_128',
+        'size': (256, 256),
+        'mean': [0.5, 0.5, 0.5],
+        'std': [0.5, 0.5, 0.5]
+    },
+    'simswap_256': {
+        'file': 'simswap_256.onnx',
+        'type': 'simswap',
+        'template': 'arcface_112_v1',
+        'size': (256, 256),
+        'mean': [0.485, 0.456, 0.406],
+        'std': [0.229, 0.224, 0.225]
+    },
+    'simswap_512_unofficial': {
+        'file': 'simswap_512_unofficial.onnx',
+        'type': 'simswap',
+        'template': 'arcface_112_v1',
+        'size': (512, 512),
+        'mean': [0.0, 0.0, 0.0],
+        'std': [1.0, 1.0, 1.0]
+    }
+}
+
+
+class FaceSwapper:
+    """
+    High performance face swapper supporting Inswapper, HyperSwap, and SimSwap models with complete masking and Pixel Boost.
+    """
+    def __init__(
+        self,
+        model_name: str = 'inswapper_128',
+        weight: float = 0.5,
+        mask_types: Optional[List[str]] = None,
+        mask_blur: float = 0.3,
+        mask_padding: Padding = (0, 0, 0, 0),
+        pixel_boost: Optional[str] = None,
+        providers: Optional[List[str]] = None,
+        model_path: Optional[str] = None
+    ):
+        self.model_name = model_name.lower()
+        if self.model_name not in SWAPPER_CONFIGS:
+            raise ValueError(f"Unsupported swapper model '{model_name}'. Supported: {list(SWAPPER_CONFIGS.keys())}")
+
+        self.cfg = SWAPPER_CONFIGS[self.model_name]
+        self.weight = weight
+        self.mask_types = mask_types or ['box', 'occlusion']
+        self.mask_blur = mask_blur
+        self.mask_padding = mask_padding
+        self.pixel_boost = pixel_boost
+
+        if providers is None:
+            available = onnxruntime.get_available_providers()
+            self.providers = [p for p in ['CUDAExecutionProvider', 'CPUExecutionProvider'] if p in available] or ['CPUExecutionProvider']
+        else:
+            self.providers = providers
+
+        self.model_file = model_path or download_model(self.model_name)
+        self.session = onnxruntime.InferenceSession(self.model_file, providers=self.providers)
+
+        # Inswapper projection matrix initializer
+        self.initializer: Optional[np.ndarray] = None
+        if self.cfg['type'] == 'inswapper':
+            try:
+                onnx_model = onnx.load(self.model_file)
+                self.initializer = onnx.numpy_helper.to_array(onnx_model.graph.initializer[-1])
+            except Exception:
+                pass
+
+        # Face Masker instance
+        self.masker = FaceMasker(providers=self.providers)
+
+    def prepare_source_embedding(self, source_face: Face) -> Embedding:
+        """Transforms source face embedding according to swapper model requirements."""
+        model_type = self.cfg['type']
+
+        if model_type == 'hyperswap':
+            return source_face.embedding_norm.reshape(1, -1)
+
+        if model_type == 'inswapper':
+            if self.initializer is not None:
+                source_emb = source_face.embedding.reshape(1, -1)
+                projected = np.dot(source_emb, self.initializer)
+                return projected / max(np.linalg.norm(source_emb), 1e-6)
+            return source_face.embedding_norm.reshape(1, -1)
+
+        # SimSwap and others
+        return source_face.embedding_norm.reshape(1, -1)
+
+    def balance_embedding(self, source_embedding: Embedding, target_face: Face) -> Embedding:
+        """Balances source identity with target face features based on weight."""
+        if self.weight == 0.5:
+            return source_embedding
+
+        weight_factor = float(np.interp(self.weight, [0.0, 1.0], [0.35, -0.35]))
+        target_norm = target_face.embedding_norm.reshape(1, -1)
+        source_emb = source_embedding.reshape(1, -1)
+
+        balanced = source_emb * (1.0 - weight_factor) + target_norm * weight_factor
+        return balanced / max(np.linalg.norm(balanced), 1e-6)
+
+    def _forward_single_crop(self, prep_crop: np.ndarray, source_embedding: np.ndarray) -> np.ndarray:
+        inputs = {}
+        for inp in self.session.get_inputs():
+            if inp.name in ['source', 'emb', 'embedding']:
+                inputs[inp.name] = source_embedding.astype(np.float32)
+            elif inp.name in ['target', 'img', 'input']:
+                inputs[inp.name] = prep_crop.astype(np.float32)
+            else:
+                if len(inp.shape) == 2:
+                    inputs[inp.name] = source_embedding.astype(np.float32)
+                else:
+                    inputs[inp.name] = prep_crop.astype(np.float32)
+
+        return self.session.run(None, inputs)[0][0]
+
+    def swap_face(
+        self,
+        source_face: Face,
+        target_face: Face,
+        target_vision_frame: VisionFrame,
+        mask_types: Optional[List[str]] = None,
+        mask_blur: Optional[float] = None,
+        mask_padding: Optional[Padding] = None,
+        pixel_boost: Optional[str] = None
+    ) -> VisionFrame:
+        """
+        Swaps a target face in the frame with identity from source_face.
+        Applies pixel boost (if enabled), masking, and seamless affine paste-back.
+        """
+        template = self.cfg['template']
+        model_size = self.cfg['size']
+        mean = np.array(self.cfg['mean'], dtype=np.float32)
+        std = np.array(self.cfg['std'], dtype=np.float32)
+
+        pb_choice = pixel_boost or self.pixel_boost or 'none'
+        if pb_choice not in ['none', None] and 'x' in pb_choice:
+            pb_dim = int(pb_choice.split('x')[0])
+            pixel_boost_size = (pb_dim, pb_dim)
+        else:
+            pixel_boost_size = model_size
+
+        pixel_boost_total = max(1, pixel_boost_size[0] // model_size[0])
+
+        # 1. Warp target face to canonical orientation (at pixel_boost_size)
+        crop_vision_frame, affine_matrix = warp_face_by_face_landmark_5(
+            target_vision_frame,
+            target_face.landmark_set['5/68'],
+            template,
+            pixel_boost_size
+        )
+
+        # 2. Prepare source embedding
+        source_embedding = self.prepare_source_embedding(source_face)
+        source_embedding = self.balance_embedding(source_embedding, target_face)
+
+        # 3. Swap inference (with Pixel Boost if total > 1)
+        if pixel_boost_total > 1:
+            tiles = implode_pixel_boost(crop_vision_frame, pixel_boost_total, model_size)
+            swapped_tiles = []
+            for tile in tiles:
+                tile_prep = tile[:, :, ::-1].astype(np.float32) / 255.0
+                tile_prep = (tile_prep - mean) / std
+                tile_prep = np.expand_dims(tile_prep.transpose(2, 0, 1), axis=0)
+
+                swapped_tile = self._forward_single_crop(tile_prep, source_embedding)
+                swapped_tile = swapped_tile.transpose(1, 2, 0)
+                swapped_tile = swapped_tile * std + mean
+                swapped_tile = (swapped_tile.clip(0, 1)[:, :, ::-1] * 255.0).astype(np.uint8)
+                swapped_tiles.append(swapped_tile)
+
+            swapped_crop = explode_pixel_boost(swapped_tiles, pixel_boost_total, model_size, pixel_boost_size)
+        else:
+            prep_crop = crop_vision_frame[:, :, ::-1].astype(np.float32) / 255.0
+            prep_crop = (prep_crop - mean) / std
+            prep_crop = np.expand_dims(prep_crop.transpose(2, 0, 1), axis=0)
+
+            swapped_crop = self._forward_single_crop(prep_crop, source_embedding)
+            swapped_crop = swapped_crop.transpose(1, 2, 0)
+            swapped_crop = swapped_crop * std + mean
+            swapped_crop = (swapped_crop.clip(0, 1)[:, :, ::-1] * 255.0).astype(np.uint8)
+
+        # 4. Generate composite mask
+        m_types = mask_types if mask_types is not None else self.mask_types
+        m_blur = mask_blur if mask_blur is not None else self.mask_blur
+        m_pad = mask_padding if mask_padding is not None else self.mask_padding
+
+        mask = self.masker.create_mask(
+            swapped_crop,
+            target_face=target_face,
+            affine_matrix=affine_matrix,
+            mask_types=m_types,
+            mask_blur=m_blur,
+            mask_padding=m_pad
+        )
+
+        # 5. Paste swapped crop seamlessly back onto the frame
+        result_frame = paste_back(
+            target_vision_frame,
+            swapped_crop,
+            mask,
+            affine_matrix
+        )
+
+        return result_frame
+
+
+def swap_face(
+    source_face: Face,
+    target_face: Face,
+    target_vision_frame: VisionFrame,
+    model_name: str = 'inswapper_128',
+    mask_types: Optional[List[str]] = None,
+    pixel_boost: Optional[str] = None
+) -> VisionFrame:
+    """Helper functional API to perform a single face swap."""
+    swapper = FaceSwapper(model_name=model_name, mask_types=mask_types, pixel_boost=pixel_boost)
+    return swapper.swap_face(source_face, target_face, target_vision_frame)
+
