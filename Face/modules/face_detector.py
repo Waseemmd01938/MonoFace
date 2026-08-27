@@ -337,13 +337,3 @@ class FaceDetector:
 
         return bounding_boxes, scores, landmarks_5
 
-
-def detect_faces(
-    vision_frame: VisionFrame,
-    model_name: str = 'yolo_face',
-    score_threshold: float = 0.5,
-    input_size: Tuple[int, int] = (640, 640)
-) -> List[Dict[str, Any]]:
-    """Helper functional API to run face detection on an image."""
-    detector = FaceDetector(model_name=model_name, score_threshold=score_threshold, input_size=input_size)
-    return detector.detect(vision_frame)

@@ -264,15 +264,3 @@ class FaceSwapper:
         return result_frame
 
 
-def swap_face(
-    source_face: Face,
-    target_face: Face,
-    target_vision_frame: VisionFrame,
-    model_name: str = 'inswapper_128',
-    mask_types: Optional[List[str]] = None,
-    pixel_boost: Optional[str] = None
-) -> VisionFrame:
-    """Helper functional API to perform a single face swap."""
-    swapper = FaceSwapper(model_name=model_name, mask_types=mask_types, pixel_boost=pixel_boost)
-    return swapper.swap_face(source_face, target_face, target_vision_frame)
-

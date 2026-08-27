@@ -161,13 +161,10 @@ class FaceAnalyser:
         faces: List[Face] = []
 
         for bbox, score, lm_5 in zip(bounding_boxes, face_scores, face_landmarks_5):
-            lm_5_68 = lm_5.copy()
-            lm_68_5 = self.landmarker.estimate_landmark_68_from_5(lm_5_68)
-            lm_68 = lm_68_5
             lm_score_68 = 0.0
-            face_angle = estimate_face_angle(lm_68_5)
+            face_angle = 0
 
-            # Refine with 68-point dense landmarker if configured
+            # Use 68-point dense landmarker if requested, else use fast 5-to-68 estimator
             if self.landmarker_score > 0:
                 try:
                     detected_68, score_68 = self.landmarker.detect_landmarks(vision_frame, bbox, face_angle)
@@ -175,8 +172,19 @@ class FaceAnalyser:
                         lm_68 = detected_68
                         lm_score_68 = score_68
                         lm_5_68 = convert_to_face_landmark_5(lm_68)
+                        lm_68_5 = lm_68
+                    else:
+                        lm_5_68 = lm_5.copy()
+                        lm_68 = self.landmarker.estimate_landmark_68_from_5(lm_5_68)
+                        lm_68_5 = lm_68
                 except Exception:
-                    pass
+                    lm_5_68 = lm_5.copy()
+                    lm_68 = self.landmarker.estimate_landmark_68_from_5(lm_5_68)
+                    lm_68_5 = lm_68
+            else:
+                lm_5_68 = lm_5.copy()
+                lm_68 = self.landmarker.estimate_landmark_68_from_5(lm_5_68)
+                lm_68_5 = lm_68
 
             landmark_set: FaceLandmarkSet = {
                 '5': lm_5,
@@ -184,6 +192,7 @@ class FaceAnalyser:
                 '68': lm_68,
                 '68/5': lm_68_5
             }
+
 
             score_set: FaceScoreSet = {
                 'detector': float(score),

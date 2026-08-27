@@ -89,18 +89,3 @@ class FaceRecognizer:
         """Determines if two embeddings belong to the same identity based on cosine similarity threshold."""
         return self.compute_similarity(embedding_a, embedding_b) >= threshold
 
-
-def calculate_face_embedding(
-    vision_frame: VisionFrame,
-    face_landmark_5: FaceLandmark5,
-    model_name: str = 'arcface'
-) -> Tuple[Embedding, Embedding]:
-    """Helper function to calculate raw and normalized face embeddings."""
-    recognizer = FaceRecognizer(model_name=model_name)
-    raw_emb, norm_emb, _, _ = recognizer.get_embedding(vision_frame, face_landmark_5)
-    return raw_emb, norm_emb
-
-
-def compare_faces(embedding_a: Embedding, embedding_b: Embedding) -> float:
-    """Helper function to compare similarity between two face embeddings."""
-    return FaceRecognizer.compute_similarity(embedding_a, embedding_b)

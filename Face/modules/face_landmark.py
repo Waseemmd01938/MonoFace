@@ -166,13 +166,3 @@ class FaceLandmarker:
         out_transformed = cv2.transform(out.reshape(1, -1, 2).astype(np.float32), cv2.invertAffineTransform(affine_matrix)).reshape(-1, 2)
         return out_transformed
 
-
-def detect_face_landmark(
-    vision_frame: VisionFrame,
-    bounding_box: BoundingBox,
-    face_angle: Angle = 0,
-    model_name: str = '2dfan4'
-) -> Tuple[FaceLandmark68, Score]:
-    """Helper function to extract 68-point face landmarks."""
-    landmarker = FaceLandmarker(model_name=model_name)
-    return landmarker.detect_landmarks(vision_frame, bounding_box, face_angle)
