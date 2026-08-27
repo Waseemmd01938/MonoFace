@@ -594,15 +594,15 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         with gr.Row():
             swapper_model = gr.Dropdown(
                 choices=[
-                    "inswapper_128",
                     "inswapper_128_fp16",
+                    "inswapper_128",
                     "hyperswap_1a_256",
                     "hyperswap_1b_256",
                     "hyperswap_1c_256",
                     "simswap_256",
                     "simswap_512_unofficial"
                 ],
-                value="inswapper_128",
+                value="inswapper_128_fp16",
                 label="Face Swapper Model"
             )
             pixel_boost = gr.Dropdown(
@@ -655,9 +655,9 @@ with gr.Blocks(title="MonoFace Pro") as demo:
             landmarker_score = gr.Slider(
                 minimum=0.0,
                 maximum=1.0,
-                value=0.5,
+                value=0.0,
                 step=0.05,
-                label="Landmarker Score Threshold"
+                label="Landmarker Score Threshold (0.0 = Fast 5-pt detector)"
             )
 
         # Margin expansion
@@ -675,7 +675,7 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         with gr.Row():
             mask_types = gr.CheckboxGroup(
                 choices=["box", "occlusion", "region", "area"],
-                value=["box", "occlusion"],
+                value=["box"],
                 label="Active Mask Types"
             )
             occluder_model = gr.Dropdown(
@@ -683,6 +683,7 @@ with gr.Blocks(title="MonoFace Pro") as demo:
                 value="face_occluder",
                 label="Occlusion Segmentation Model"
             )
+
             mask_blur = gr.Slider(
                 minimum=0.0,
                 maximum=1.0,
