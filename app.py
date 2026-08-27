@@ -655,7 +655,7 @@ with gr.Blocks(title="MonoFace Pro") as demo:
             landmarker_score = gr.Slider(
                 minimum=0.0,
                 maximum=1.0,
-                value=0.0,
+                value=0.5,
                 step=0.05,
                 label="Landmarker Score Threshold (0.0 = Fast 5-pt detector)"
             )
@@ -807,4 +807,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"⚠️ Note: Face analyser models will load on first inference ({e})")
 
-    demo.launch(share=True, inbrowser=True, theme=theme, css=custom_css)
+    demo.launch(share=True, inbrowser=True, theme=theme, css=custom_css)
