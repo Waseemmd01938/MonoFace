@@ -696,8 +696,8 @@ with gr.Blocks(title="MonoFace Pro") as demo:
                 label="Active Mask Types"
             )
             occluder_model = gr.Dropdown(
-                choices=["face_occluder", "xseg_1", "xseg_2", "xseg_3"],
-                value="face_occluder",
+                choices=["xseg_1", "xseg_2", "xseg_3"],
+                value="xseg_1",
                 label="Occlusion Segmentation Model"
             )
 

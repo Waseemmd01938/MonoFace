@@ -10,11 +10,6 @@ from downloads import download_model
 
 
 OCCLUSION_MODELS = {
-
-    'face_occluder': {
-        'file': 'face_occluder.onnx',
-        'size': (256, 256)
-    },
     'xseg_1': {
         'file': 'xseg_1.onnx',
         'size': (256, 256)

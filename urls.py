@@ -123,14 +123,6 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     # -------------------------------------------------------------
     # 5. Face Maskers & Occlusion
     # -------------------------------------------------------------
-    'face_occluder': {
-        'category': 'face_masker',
-        'file': 'face_occluder.onnx',
-        'hash_file': 'face_occluder.hash',
-        'tag': 'models-3.0.0',
-        'size': (256, 256),
-        'vendor': 'FaceFusion'
-    },
     'face_parser': {
         'category': 'face_masker',
         'file': 'face_parser.onnx',
