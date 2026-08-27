@@ -530,7 +530,7 @@ theme = gr.themes.Soft(
     secondary_hue="slate"
 )
 
-with gr.Blocks(title="MonoFace Pro", css=custom_css, theme=theme) as demo:
+with gr.Blocks(title="MonoFace Pro") as demo:
     gr.Markdown(
         """
         # ⚡ MonoFace Studio: Next-Gen Face Swapping Pipeline
@@ -763,4 +763,9 @@ with gr.Blocks(title="MonoFace Pro", css=custom_css, theme=theme) as demo:
     )
 
 if __name__ == "__main__":
-    demo.launch(share=True, inbrowser=True)
+    import onnxruntime
+    providers = onnxruntime.get_available_providers()
+    print(f"🔥 Active ONNX Runtime Execution Providers: {providers}")
+    if "CUDAExecutionProvider" not in providers:
+        print("⚠️ Warning: CUDAExecutionProvider not detected! Running on CPU. For 10-30x faster GPU inference, install: pip install onnxruntime-gpu")
+    demo.launch(share=True, inbrowser=True, theme=theme, css=custom_css)

@@ -64,7 +64,7 @@ class FaceAnalyser:
         landmarker_model: str = '2dfan4',
         landmarker_score: float = 0.5,
         recognizer_model: str = 'arcface',
-        classifier_model: str = 'fairface',
+        classifier_model: Optional[str] = None,
         detector_size: Tuple[int, int] = (640, 640),
         detector_angles: Optional[List[Angle]] = None,
         providers: Optional[List[str]] = None
@@ -124,11 +124,12 @@ class FaceAnalyser:
         vision_frame: VisionFrame,
         bounding_boxes: List[BoundingBox],
         face_scores: List[Score],
-        face_landmarks_5: List[FaceLandmark5]
+        face_landmarks_5: List[FaceLandmark5],
+        classify: bool = False
     ) -> List[Face]:
         """
         Creates structured Face objects with complete 5-point, 68-point landmarks,
-        ArcFace embeddings, and demographic classifications.
+        ArcFace embeddings, and optional demographic classifications.
         """
         faces: List[Face] = []
 
@@ -165,8 +166,13 @@ class FaceAnalyser:
             # Extract 512-D ArcFace embedding
             raw_emb, norm_emb, _, _ = self.recognizer.get_embedding(vision_frame, landmark_set['5/68'])
 
-            # Classify gender, age, race
-            gender, age, race = classify_face(vision_frame, landmark_set['5/68'])
+            # Classify gender, age, race only if explicitly requested or configured
+            gender, age, race = None, None, None
+            if classify or self.classifier_model:
+                try:
+                    gender, age, race = classify_face(vision_frame, landmark_set['5/68'])
+                except Exception:
+                    pass
 
             faces.append(Face(
                 bounding_box=bbox,
