@@ -121,6 +121,31 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
 
     # -------------------------------------------------------------
+    # 4. Embedding Converters (CrossFace)
+    # -------------------------------------------------------------
+    'crossface_simswap': {
+        'category': 'embedding_converter',
+        'file': 'crossface_simswap.onnx',
+        'hash_file': 'crossface_simswap.hash',
+        'tag': 'models-3.4.0',
+        'vendor': 'FaceFusion'
+    },
+    'crossface_ghost': {
+        'category': 'embedding_converter',
+        'file': 'crossface_ghost.onnx',
+        'hash_file': 'crossface_ghost.hash',
+        'tag': 'models-3.4.0',
+        'vendor': 'FaceFusion'
+    },
+    'crossface_hififace': {
+        'category': 'embedding_converter',
+        'file': 'crossface_hififace.onnx',
+        'hash_file': 'crossface_hififace.hash',
+        'tag': 'models-3.4.0',
+        'vendor': 'FaceFusion'
+    },
+
+    # -------------------------------------------------------------
     # 5. Face Maskers & Occlusion
     # -------------------------------------------------------------
     'face_parser': {
@@ -215,8 +240,17 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
     'simswap_512_unofficial': {
         'category': 'face_swapper',
-        'file': 'simswap_512_unofficial.onnx',
-        'hash_file': 'simswap_512_unofficial.hash',
+        'file': 'simswap_unofficial_512.onnx',
+        'hash_file': 'simswap_unofficial_512.hash',
+        'tag': 'models-3.0.0',
+        'template': 'arcface_112_v1',
+        'size': (512, 512),
+        'vendor': 'neuralchen'
+    },
+    'simswap_unofficial_512': {
+        'category': 'face_swapper',
+        'file': 'simswap_unofficial_512.onnx',
+        'hash_file': 'simswap_unofficial_512.hash',
         'tag': 'models-3.0.0',
         'template': 'arcface_112_v1',
         'size': (512, 512),

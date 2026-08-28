@@ -66,15 +66,26 @@ SWAPPER_CONFIGS: Dict[str, Dict[str, Any]] = {
         'template': 'arcface_112_v1',
         'size': (256, 256),
         'mean': [0.485, 0.456, 0.406],
-        'std': [0.229, 0.224, 0.225]
+        'std': [0.229, 0.224, 0.225],
+        'converter': 'crossface_simswap'
     },
     'simswap_512_unofficial': {
-        'file': 'simswap_512_unofficial.onnx',
+        'file': 'simswap_unofficial_512.onnx',
         'type': 'simswap',
         'template': 'arcface_112_v1',
         'size': (512, 512),
         'mean': [0.0, 0.0, 0.0],
-        'std': [1.0, 1.0, 1.0]
+        'std': [1.0, 1.0, 1.0],
+        'converter': 'crossface_simswap'
+    },
+    'simswap_unofficial_512': {
+        'file': 'simswap_unofficial_512.onnx',
+        'type': 'simswap',
+        'template': 'arcface_112_v1',
+        'size': (512, 512),
+        'mean': [0.0, 0.0, 0.0],
+        'std': [1.0, 1.0, 1.0],
+        'converter': 'crossface_simswap'
     }
 }
 
@@ -126,6 +137,12 @@ class FaceSwapper:
                 except Exception:
                     pass
 
+        # Embedding converter session for SimSwap / Ghost / HifiFace
+        self.embedding_converter_session: Optional[onnxruntime.InferenceSession] = None
+        if self.cfg.get('converter'):
+            converter_file = download_model(self.cfg['converter'])
+            self.embedding_converter_session = get_inference_session(converter_file, providers=self.providers)
+
         # Face Masker instance
         self.masker = FaceMasker(providers=self.providers)
 
@@ -144,7 +161,14 @@ class FaceSwapper:
                 return projected / max(np.linalg.norm(source_emb), 1e-6)
             return source_face.embedding_norm.reshape(1, -1)
 
-        # SimSwap and others
+        if model_type == 'simswap':
+            if self.embedding_converter_session is not None:
+                source_emb = source_face.embedding.reshape(-1, 512).astype(np.float32)
+                converted_emb = self.embedding_converter_session.run(None, {'input': source_emb})[0].ravel()
+                converted_norm = converted_emb / max(np.linalg.norm(converted_emb), 1e-6)
+                return converted_norm.reshape(1, -1)
+            return source_face.embedding_norm.reshape(1, -1)
+
         return source_face.embedding_norm.reshape(1, -1)
 
     def balance_embedding(self, source_embedding: Embedding, target_face: Face) -> Embedding:
@@ -193,6 +217,7 @@ class FaceSwapper:
         """
         template = self.cfg['template']
         model_size = self.cfg['size']
+        model_type = self.cfg['type']
         mean = np.array(self.cfg['mean'], dtype=np.float32)
         std = np.array(self.cfg['std'], dtype=np.float32)
 
@@ -230,7 +255,8 @@ class FaceSwapper:
 
                 swapped_tile = self._forward_single_crop(tile_prep, source_embedding)
                 swapped_tile = swapped_tile.transpose(1, 2, 0)
-                swapped_tile = swapped_tile * std + mean
+                if model_type in ['hyperswap', 'ghost', 'hififace', 'uniface']:
+                    swapped_tile = swapped_tile * std + mean
                 swapped_tile = (swapped_tile.clip(0, 1)[:, :, ::-1] * 255.0).astype(np.uint8)
                 swapped_tiles.append(swapped_tile)
 
@@ -242,7 +268,8 @@ class FaceSwapper:
 
             swapped_crop = self._forward_single_crop(prep_crop, source_embedding)
             swapped_crop = swapped_crop.transpose(1, 2, 0)
-            swapped_crop = swapped_crop * std + mean
+            if model_type in ['hyperswap', 'ghost', 'hififace', 'uniface']:
+                swapped_crop = swapped_crop * std + mean
             swapped_crop = (swapped_crop.clip(0, 1)[:, :, ::-1] * 255.0).astype(np.uint8)
 
         # 4. Generate composite mask
