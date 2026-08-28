@@ -843,9 +843,9 @@ with gr.Blocks(title="MonoFace Pro") as demo:
     with gr.Tab("🎯 Face Selector & Sorting"):
         with gr.Row():
             face_selector_mode = gr.Dropdown(
-                choices=["many", "one", "reference"],
+                choices=["many", "reference"],
                 value="many",
-                label="Face Selector Mode (many=All faces, one=Single face, reference=Match reference face)"
+                label="Face Selector Mode (many=All faces, reference=Match reference face)"
             )
             face_selector_order = gr.Dropdown(
                 choices=[
@@ -866,21 +866,21 @@ with gr.Blocks(title="MonoFace Pro") as demo:
                 maximum=1.0,
                 step=0.05,
                 value=0.3,
-                label="Reference Face Distance Threshold (0.3 = Standard FaceFusion default)"
+                label="Reference Face Distance Threshold (0.3 = Standard FaceFusion default)",
+                visible=False
             )
 
         # Internal state for selected target face position index (updated by clicking gallery faces)
         face_selector_position = gr.State(value=0)
 
-        with gr.Group():
-            gr.Markdown("### 👤 Target / Preview Frame Detected Faces (Click any face to select for swap/tracking)")
+        with gr.Group(visible=False) as reference_container:
+            gr.Markdown("### 👤 Target / Preview Frame Detected Faces (Click any face to select as Reference Face)")
             ref_gallery = gr.Gallery(
                 label="Detected Faces in Target / Preview Frame",
                 columns=6,
                 height=200,
                 allow_preview=False,
-                object_fit="cover",
-                visible=face_selector_mode == "reference"
+                object_fit="cover"
             )
             ref_status = gr.Markdown("Load a target image/video or adjust the preview frame slider to detect faces.")
 
@@ -993,6 +993,39 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         fn=on_reference_gallery_select,
         inputs=None,
         outputs=[face_selector_position, ref_status]
+    )
+
+    def on_face_selector_mode_change(
+        mode: str,
+        target_file: Optional[str],
+        frame_index: int,
+        detector_model: str,
+        detector_size_str: str,
+        detector_score: float,
+        detector_angles: List[int],
+        margin_top: int,
+        margin_right: int,
+        margin_bottom: int,
+        margin_left: int,
+        landmarker_model: str,
+        landmarker_score: float,
+        face_selector_order: str,
+        face_selector_position: int
+    ):
+        is_ref = (mode == "reference")
+        if is_ref:
+            gallery_items, status = update_reference_face_gallery(
+                target_file, frame_index, detector_model, detector_size_str, detector_score, detector_angles,
+                margin_top, margin_right, margin_bottom, margin_left, landmarker_model, landmarker_score,
+                face_selector_order, face_selector_position
+            )
+            return gr.update(visible=True), gr.update(visible=True), gallery_items, status
+        return gr.update(visible=False), gr.update(visible=False), [], "Switch to 'reference' mode to select a reference face."
+
+    face_selector_mode.change(
+        fn=on_face_selector_mode_change,
+        inputs=[face_selector_mode] + ref_detector_inputs,
+        outputs=[reference_face_distance, reference_container, ref_gallery, ref_status]
     )
 
     # Automatically refresh detected target faces gallery on changes

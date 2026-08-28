@@ -7,7 +7,7 @@ Scale: TypeAlias = float
 Score: TypeAlias = float
 Angle: TypeAlias = int
 
-FaceSelectorMode: TypeAlias = Literal['many', 'one', 'reference']
+FaceSelectorMode: TypeAlias = Literal['many', 'reference']
 FaceSelectorOrder: TypeAlias = Literal[
     'left-right',
     'right-left',
