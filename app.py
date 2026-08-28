@@ -256,10 +256,10 @@ def update_reference_face_gallery(
     landmarker_score: float,
     face_selector_order: str,
     face_selector_position: int
-) -> Tuple[List[Tuple[np.ndarray, str]], Optional[np.ndarray], str]:
-    """Extracts all detected faces from the selected target frame for reference inspection."""
+) -> Tuple[List[Tuple[np.ndarray, str]], str]:
+    """Extracts all detected faces from the selected target / preview frame for visual inspection and selection."""
     if not target_file:
-        return [], None, "Upload a target image or video to inspect detected faces."
+        return [], "Upload a target image or video to inspect detected faces."
 
     _, ext = safe_filename(target_file)
     if ext in IMAGE_EXTS:
@@ -267,14 +267,14 @@ def update_reference_face_gallery(
     else:
         cap = cv2.VideoCapture(target_file)
         if not cap.isOpened():
-            return [], None, "Failed to open target video."
+            return [], "Failed to open target video."
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         frame_idx = int(np.clip(frame_index, 0, max(0, total_frames - 1)))
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
         ok, target_frame = cap.read()
         cap.release()
         if not ok or target_frame is None:
-            return [], None, "Failed to read target frame."
+            return [], "Failed to read target frame."
 
     det_w, det_h = (int(x) for x in detector_size_str.split('x'))
     analyser = FaceAnalyser(
@@ -289,7 +289,7 @@ def update_reference_face_gallery(
 
     faces = analyser.get_many_faces([target_frame], extract_embedding=True)
     if not faces:
-        return [], None, "⚠️ No faces detected in the current target frame with active detector settings."
+        return [], "⚠️ No faces detected in the current target frame with active detector settings."
 
     sorted_faces = analyser.sort_faces(faces, face_selector_order)
     gallery_items = []
@@ -300,10 +300,9 @@ def update_reference_face_gallery(
         gallery_items.append((avatar, caption))
 
     sel_idx = min(max(0, int(face_selector_position)), len(sorted_faces) - 1)
-    selected_avatar = gallery_items[sel_idx][0] if gallery_items else None
-    status = f"✅ Detected {len(sorted_faces)} face(s). Currently tracking Face #{sel_idx}."
+    status = f"✅ Detected {len(sorted_faces)} face(s). Currently selected: Face #{sel_idx}."
 
-    return gallery_items, selected_avatar, status
+    return gallery_items, status
 
 
 # -----------------------------------------
@@ -426,6 +425,7 @@ def preview_swap_frame(
 def run_batch_swap(
     source_files: List[str],
     target_file: str,
+    preview_frame_index: int,
     trim_mode: str,
     start_sec: float,
     end_sec: float,
@@ -575,16 +575,18 @@ def run_batch_swap(
     start_time = time.time()
     prepared_source_embedding = swapper.prepare_source_embedding(source_face)
 
-    # Establish reference face identity if running in reference selector mode
+    # Establish reference face identity from the user's selected Preview Target Frame
     reference_face = None
     if face_selector_mode == 'reference' and total_frames > 0:
-        first_frame = cv2.imread(frame_files[0])
-        first_faces = analyser.get_many_faces([first_frame], extract_embedding=True)
-        if first_faces:
-            sorted_first = analyser.sort_faces(first_faces, face_selector_order)
-            ref_idx = min(max(0, int(face_selector_position)), len(sorted_first) - 1)
-            reference_face = sorted_first[ref_idx]
-            print(f"🎯 Reference face identity established (Position: {ref_idx}, Order: {face_selector_order})")
+        ref_frame_num = int(np.clip(preview_frame_index, 0, total_frames - 1))
+        ref_frame_path = frame_files[ref_frame_num] if ref_frame_num < len(frame_files) else frame_files[0]
+        ref_frame = cv2.imread(ref_frame_path)
+        ref_faces = analyser.get_many_faces([ref_frame], extract_embedding=True)
+        if ref_faces:
+            sorted_ref = analyser.sort_faces(ref_faces, face_selector_order)
+            ref_idx = min(max(0, int(face_selector_position)), len(sorted_ref) - 1)
+            reference_face = sorted_ref[ref_idx]
+            print(f"🎯 Reference face identity established from Preview Target Frame #{ref_frame_num} (Face #{ref_idx}, Order: {face_selector_order})")
 
     need_embeddings = (face_selector_mode == 'reference')
 
@@ -859,14 +861,6 @@ with gr.Blocks(title="MonoFace Pro") as demo:
                 value="large-small",
                 label="Face Sorting Order"
             )
-        with gr.Row():
-            face_selector_position = gr.Slider(
-                minimum=0,
-                maximum=10,
-                step=1,
-                value=0,
-                label="Face Selector Position / Index (0=First sorted face)"
-            )
             reference_face_distance = gr.Slider(
                 minimum=0.0,
                 maximum=1.0,
@@ -875,24 +869,19 @@ with gr.Blocks(title="MonoFace Pro") as demo:
                 label="Reference Face Distance Threshold (Lower = stricter match)"
             )
 
+        # Internal state for selected target face position index (updated by clicking gallery faces)
+        face_selector_position = gr.State(value=0)
+
         with gr.Group():
-            gr.Markdown("### 👤 Target Frame Detected Faces & Active Reference Face")
-            with gr.Row():
-                ref_gallery = gr.Gallery(
-                    label="Detected Target Faces (Click any face to set as Reference)",
-                    columns=5,
-                    height=200,
-                    allow_preview=False,
-                    object_fit="cover"
-                )
-                ref_selected_preview = gr.Image(
-                    label="Active Reference Face Crop",
-                    height=200,
-                    width=200
-                )
-            with gr.Row():
-                refresh_ref_btn = gr.Button("🔄 Refresh Reference Faces from Target", variant="secondary", size="sm")
-                ref_status = gr.Markdown("Click 'Refresh' or load a target file to view detected faces.")
+            gr.Markdown("### 👤 Target / Preview Frame Detected Faces (Click any face to select for swap/tracking)")
+            ref_gallery = gr.Gallery(
+                label="Detected Faces in Target / Preview Frame",
+                columns=6,
+                height=200,
+                allow_preview=False,
+                object_fit="cover"
+            )
+            ref_status = gr.Markdown("Load a target image/video or adjust the preview frame slider to detect faces.")
 
     # -------------------------------------------------------------
     # Masking & Blending Controls
@@ -995,105 +984,37 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         face_selector_position
     ]
 
-    def on_reference_gallery_select(
-        evt: gr.SelectData,
-        target_file: Optional[str],
-        frame_index: int,
-        detector_model: str,
-        detector_size_str: str,
-        detector_score: float,
-        detector_angles: List[int],
-        margin_top: int,
-        margin_right: int,
-        margin_bottom: int,
-        margin_left: int,
-        landmarker_model: str,
-        landmarker_score: float,
-        face_selector_order: str
-    ):
+    def on_reference_gallery_select(evt: gr.SelectData):
         selected_idx = evt.index
-        gallery_items, selected_avatar, _ = update_reference_face_gallery(
-            target_file, frame_index, detector_model, detector_size_str, detector_score, detector_angles,
-            margin_top, margin_right, margin_bottom, margin_left, landmarker_model, landmarker_score,
-            face_selector_order, selected_idx
-        )
-        return selected_idx, selected_avatar, f"🎯 Selected Face #{selected_idx} as reference face."
-
-    def on_position_slider_change(
-        position: int,
-        target_file: Optional[str],
-        frame_index: int,
-        detector_model: str,
-        detector_size_str: str,
-        detector_score: float,
-        detector_angles: List[int],
-        margin_top: int,
-        margin_right: int,
-        margin_bottom: int,
-        margin_left: int,
-        landmarker_model: str,
-        landmarker_score: float,
-        face_selector_order: str
-    ):
-        gallery_items, selected_avatar, status = update_reference_face_gallery(
-            target_file, frame_index, detector_model, detector_size_str, detector_score, detector_angles,
-            margin_top, margin_right, margin_bottom, margin_left, landmarker_model, landmarker_score,
-            face_selector_order, int(position)
-        )
-        return selected_avatar, status
-
-    refresh_ref_btn.click(
-        fn=update_reference_face_gallery,
-        inputs=ref_detector_inputs,
-        outputs=[ref_gallery, ref_selected_preview, ref_status]
-    )
+        return selected_idx, f"🎯 Selected Face #{selected_idx} as active target/reference face."
 
     ref_gallery.select(
         fn=on_reference_gallery_select,
-        inputs=[
-            tgt_file,
-            frame_slider,
-            detector_model,
-            detector_size,
-            detector_score,
-            detector_angles,
-            margin_top,
-            margin_right,
-            margin_bottom,
-            margin_left,
-            landmarker_model,
-            landmarker_score,
-            face_selector_order
-        ],
-        outputs=[face_selector_position, ref_selected_preview, ref_status]
+        inputs=None,
+        outputs=[face_selector_position, ref_status]
     )
 
-    face_selector_position.release(
-        fn=on_position_slider_change,
-        inputs=[
-            face_selector_position,
-            tgt_file,
-            frame_slider,
-            detector_model,
-            detector_size,
-            detector_score,
-            detector_angles,
-            margin_top,
-            margin_right,
-            margin_bottom,
-            margin_left,
-            landmarker_model,
-            landmarker_score,
-            face_selector_order
-        ],
-        outputs=[ref_selected_preview, ref_status]
-    )
+    # Automatically refresh detected target faces gallery on changes
+    for comp in [tgt_file, face_selector_order]:
+        comp.change(
+            fn=update_reference_face_gallery,
+            inputs=ref_detector_inputs,
+            outputs=[ref_gallery, ref_status]
+        )
 
-    face_selector_order.change(
-        fn=update_reference_face_gallery,
-        inputs=ref_detector_inputs,
-        outputs=[ref_gallery, ref_selected_preview, ref_status]
-    )
+    for comp in [detector_model, detector_size, detector_angles, landmarker_model]:
+        comp.change(
+            fn=update_reference_face_gallery,
+            inputs=ref_detector_inputs,
+            outputs=[ref_gallery, ref_status]
+        )
+
+    for comp in [frame_slider, detector_score, landmarker_score, margin_top, margin_right, margin_bottom, margin_left]:
+        comp.release(
+            fn=update_reference_face_gallery,
+            inputs=ref_detector_inputs,
+            outputs=[ref_gallery, ref_status]
+        )
 
     all_config_inputs = [
         swapper_model,
@@ -1135,6 +1056,7 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         inputs=[
             src_files,
             tgt_file,
+            frame_slider,
             trim_mode,
             start_sec,
             end_sec,
