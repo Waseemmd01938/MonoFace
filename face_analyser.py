@@ -339,32 +339,27 @@ def calculate_face_distance(face: Face, reference_face: Face) -> float:
     """Calculates normalized cosine distance [0, 1] between two face embeddings."""
     if face is None or reference_face is None:
         return 1.0
-    if face is reference_face:
-        return 0.0
-    if hasattr(face, 'bounding_box') and hasattr(reference_face, 'bounding_box'):
-        if np.array_equal(face.bounding_box, reference_face.bounding_box):
-            return 0.0
     if hasattr(face, 'embedding_norm') and hasattr(reference_face, 'embedding_norm'):
         if face.embedding_norm is not None and reference_face.embedding_norm is not None:
             sim = float(np.dot(face.embedding_norm, reference_face.embedding_norm))
             distance = 1.0 - sim
             return float(np.interp(distance, [0.0, 2.0], [0.0, 1.0]))
+    if face is reference_face:
+        return 0.0
+    if hasattr(face, 'bounding_box') and hasattr(reference_face, 'bounding_box'):
+        if np.array_equal(face.bounding_box, reference_face.bounding_box):
+            return 0.0
     return 1.0
 
 
-def compare_faces(face: Face, reference_face: Face, face_distance_threshold: float = 0.6) -> bool:
+def compare_faces(face: Face, reference_face: Face, face_distance_threshold: float = 0.3) -> bool:
     """Checks if a target face is within the distance threshold of the reference face."""
     if face is None or reference_face is None:
         return False
-    if face is reference_face:
-        return True
-    if hasattr(face, 'bounding_box') and hasattr(reference_face, 'bounding_box'):
-        if np.array_equal(face.bounding_box, reference_face.bounding_box):
-            return True
     return calculate_face_distance(face, reference_face) <= face_distance_threshold
 
 
-def find_match_faces(reference_faces: List[Face], target_faces: List[Face], face_distance: float = 0.6) -> List[Face]:
+def find_match_faces(reference_faces: List[Face], target_faces: List[Face], face_distance: float = 0.3) -> List[Face]:
     """Finds all target faces that match any given reference face within the distance threshold."""
     match_faces = []
     for target_face in target_faces:
@@ -381,7 +376,7 @@ def select_target_faces(
     order: str = 'large-small',
     position: int = 0,
     reference_face: Optional[Face] = None,
-    reference_distance: float = 0.6
+    reference_distance: float = 0.3
 ) -> List[Face]:
     """
     Selects and filters target faces based on mode ('many', 'one', 'reference') and sort order.
@@ -395,22 +390,14 @@ def select_target_faces(
         return sorted_faces
 
     if mode == 'one':
-        pos = min(max(0, position), len(sorted_faces) - 1)
+        pos = min(max(0, int(position)), len(sorted_faces) - 1)
         return [sorted_faces[pos]]
 
     if mode == 'reference':
         if reference_face is None:
-            pos = min(max(0, position), len(sorted_faces) - 1)
+            pos = min(max(0, int(position)), len(sorted_faces) - 1)
             return [sorted_faces[pos]]
-        matched = find_match_faces([reference_face], sorted_faces, reference_distance)
-        if not matched:
-            # Fallback if matching threshold was too restrictive or reference is in the list
-            for f in sorted_faces:
-                if f is reference_face or np.array_equal(f.bounding_box, reference_face.bounding_box):
-                    return [f]
-            pos = min(max(0, position), len(sorted_faces) - 1)
-            return [sorted_faces[pos]]
-        return matched
+        return find_match_faces([reference_face], sorted_faces, reference_distance)
 
     return sorted_faces
 

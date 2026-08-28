@@ -865,8 +865,8 @@ with gr.Blocks(title="MonoFace Pro") as demo:
                 minimum=0.0,
                 maximum=1.0,
                 step=0.05,
-                value=0.6,
-                label="Reference Face Distance Threshold (Lower = stricter match)"
+                value=0.3,
+                label="Reference Face Distance Threshold (0.3 = Standard FaceFusion default)"
             )
 
         # Internal state for selected target face position index (updated by clicking gallery faces)
