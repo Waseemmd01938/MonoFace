@@ -879,7 +879,8 @@ with gr.Blocks(title="MonoFace Pro") as demo:
                 columns=6,
                 height=200,
                 allow_preview=False,
-                object_fit="cover"
+                object_fit="cover",
+                visible=face_selector_mode == "reference"
             )
             ref_status = gr.Markdown("Load a target image/video or adjust the preview frame slider to detect faces.")
 
