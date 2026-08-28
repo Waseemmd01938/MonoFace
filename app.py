@@ -224,6 +224,88 @@ def get_source_face_from_paths(analyser: FaceAnalyser, source_paths: List[str]) 
     return avg_face or source_faces[0]
 
 
+def crop_face_avatar(vision_frame: np.ndarray, face: Face, size: Tuple[int, int] = (160, 160)) -> np.ndarray:
+    """Crops a face with balanced margin padding for gallery display."""
+    start_x, start_y, end_x, end_y = map(int, face.bounding_box)
+    padding_x = int((end_x - start_x) * 0.25)
+    padding_y = int((end_y - start_y) * 0.25)
+    h, w = vision_frame.shape[:2]
+    start_x = max(0, start_x - padding_x)
+    start_y = max(0, start_y - padding_y)
+    end_x = min(w, end_x + padding_x)
+    end_y = min(h, end_y + padding_y)
+    if end_x <= start_x or end_y <= start_y:
+        return np.zeros((size[1], size[0], 3), dtype=np.uint8)
+    crop = vision_frame[start_y:end_y, start_x:end_x]
+    crop = cv2.resize(crop, size, interpolation=cv2.INTER_AREA)
+    return cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+
+
+def update_reference_face_gallery(
+    target_file: Optional[str],
+    frame_index: int,
+    detector_model: str,
+    detector_size_str: str,
+    detector_score: float,
+    detector_angles: List[int],
+    margin_top: int,
+    margin_right: int,
+    margin_bottom: int,
+    margin_left: int,
+    landmarker_model: str,
+    landmarker_score: float,
+    face_selector_order: str,
+    face_selector_position: int
+) -> Tuple[List[Tuple[np.ndarray, str]], Optional[np.ndarray], str]:
+    """Extracts all detected faces from the selected target frame for reference inspection."""
+    if not target_file:
+        return [], None, "Upload a target image or video to inspect detected faces."
+
+    _, ext = safe_filename(target_file)
+    if ext in IMAGE_EXTS:
+        target_frame = read_image(target_file)
+    else:
+        cap = cv2.VideoCapture(target_file)
+        if not cap.isOpened():
+            return [], None, "Failed to open target video."
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        frame_idx = int(np.clip(frame_index, 0, max(0, total_frames - 1)))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        ok, target_frame = cap.read()
+        cap.release()
+        if not ok or target_frame is None:
+            return [], None, "Failed to read target frame."
+
+    det_w, det_h = (int(x) for x in detector_size_str.split('x'))
+    analyser = FaceAnalyser(
+        detector_model=detector_model,
+        detector_score=detector_score,
+        detector_size=(det_w, det_h),
+        detector_angles=[int(a) for a in detector_angles] if detector_angles else [0],
+        landmarker_model=landmarker_model,
+        landmarker_score=landmarker_score
+    )
+    analyser.detector.margin = (margin_top, margin_right, margin_bottom, margin_left)
+
+    faces = analyser.get_many_faces([target_frame], extract_embedding=False)
+    if not faces:
+        return [], None, "⚠️ No faces detected in the current target frame with active detector settings."
+
+    sorted_faces = analyser.sort_faces(faces, face_selector_order)
+    gallery_items = []
+    for idx, f in enumerate(sorted_faces):
+        avatar = crop_face_avatar(target_frame, f)
+        score = f.score_set.get('detector', 0.0) if isinstance(f.score_set, dict) else 0.0
+        caption = f"Face #{idx} (Score: {score:.2f})"
+        gallery_items.append((avatar, caption))
+
+    sel_idx = min(max(0, int(face_selector_position)), len(sorted_faces) - 1)
+    selected_avatar = gallery_items[sel_idx][0] if gallery_items else None
+    status = f"✅ Detected {len(sorted_faces)} face(s). Currently tracking Face #{sel_idx}."
+
+    return gallery_items, selected_avatar, status
+
+
 # -----------------------------------------
 # 3) Interactive Preview Function
 # -----------------------------------------
@@ -793,6 +875,25 @@ with gr.Blocks(title="MonoFace Pro") as demo:
                 label="Reference Face Distance Threshold (Lower = stricter match)"
             )
 
+        with gr.Group():
+            gr.Markdown("### 👤 Target Frame Detected Faces & Active Reference Face")
+            with gr.Row():
+                ref_gallery = gr.Gallery(
+                    label="Detected Target Faces (Click any face to set as Reference)",
+                    columns=5,
+                    height=200,
+                    allow_preview=False,
+                    object_fit="cover"
+                )
+                ref_selected_preview = gr.Image(
+                    label="Active Reference Face Crop",
+                    height=200,
+                    width=200
+                )
+            with gr.Row():
+                refresh_ref_btn = gr.Button("🔄 Refresh Reference Faces from Target", variant="secondary", size="sm")
+                ref_status = gr.Markdown("Click 'Refresh' or load a target file to view detected faces.")
+
     # -------------------------------------------------------------
     # Masking & Blending Controls
     # -------------------------------------------------------------
@@ -875,6 +976,123 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         fn=update_ui_for_target,
         inputs=[tgt_file],
         outputs=[out_image, out_video, orig_fps, total_duration, preview_box, frame_slider]
+    )
+
+    ref_detector_inputs = [
+        tgt_file,
+        frame_slider,
+        detector_model,
+        detector_size,
+        detector_score,
+        detector_angles,
+        margin_top,
+        margin_right,
+        margin_bottom,
+        margin_left,
+        landmarker_model,
+        landmarker_score,
+        face_selector_order,
+        face_selector_position
+    ]
+
+    def on_reference_gallery_select(
+        evt: gr.SelectData,
+        target_file: Optional[str],
+        frame_index: int,
+        detector_model: str,
+        detector_size_str: str,
+        detector_score: float,
+        detector_angles: List[int],
+        margin_top: int,
+        margin_right: int,
+        margin_bottom: int,
+        margin_left: int,
+        landmarker_model: str,
+        landmarker_score: float,
+        face_selector_order: str
+    ):
+        selected_idx = evt.index
+        gallery_items, selected_avatar, _ = update_reference_face_gallery(
+            target_file, frame_index, detector_model, detector_size_str, detector_score, detector_angles,
+            margin_top, margin_right, margin_bottom, margin_left, landmarker_model, landmarker_score,
+            face_selector_order, selected_idx
+        )
+        return selected_idx, selected_avatar, f"🎯 Selected Face #{selected_idx} as reference face."
+
+    def on_position_slider_change(
+        position: int,
+        target_file: Optional[str],
+        frame_index: int,
+        detector_model: str,
+        detector_size_str: str,
+        detector_score: float,
+        detector_angles: List[int],
+        margin_top: int,
+        margin_right: int,
+        margin_bottom: int,
+        margin_left: int,
+        landmarker_model: str,
+        landmarker_score: float,
+        face_selector_order: str
+    ):
+        gallery_items, selected_avatar, status = update_reference_face_gallery(
+            target_file, frame_index, detector_model, detector_size_str, detector_score, detector_angles,
+            margin_top, margin_right, margin_bottom, margin_left, landmarker_model, landmarker_score,
+            face_selector_order, int(position)
+        )
+        return selected_avatar, status
+
+    refresh_ref_btn.click(
+        fn=update_reference_face_gallery,
+        inputs=ref_detector_inputs,
+        outputs=[ref_gallery, ref_selected_preview, ref_status]
+    )
+
+    ref_gallery.select(
+        fn=on_reference_gallery_select,
+        inputs=[
+            tgt_file,
+            frame_slider,
+            detector_model,
+            detector_size,
+            detector_score,
+            detector_angles,
+            margin_top,
+            margin_right,
+            margin_bottom,
+            margin_left,
+            landmarker_model,
+            landmarker_score,
+            face_selector_order
+        ],
+        outputs=[face_selector_position, ref_selected_preview, ref_status]
+    )
+
+    face_selector_position.release(
+        fn=on_position_slider_change,
+        inputs=[
+            face_selector_position,
+            tgt_file,
+            frame_slider,
+            detector_model,
+            detector_size,
+            detector_score,
+            detector_angles,
+            margin_top,
+            margin_right,
+            margin_bottom,
+            margin_left,
+            landmarker_model,
+            landmarker_score,
+            face_selector_order
+        ],
+        outputs=[ref_selected_preview, ref_status]
+    )
+
+    face_selector_order.change(
+        fn=update_reference_face_gallery,
+        inputs=ref_detector_inputs,
+        outputs=[ref_gallery, ref_selected_preview, ref_status]
     )
 
     all_config_inputs = [
