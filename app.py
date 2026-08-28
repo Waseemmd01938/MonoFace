@@ -287,7 +287,7 @@ def update_reference_face_gallery(
     )
     analyser.detector.margin = (margin_top, margin_right, margin_bottom, margin_left)
 
-    faces = analyser.get_many_faces([target_frame], extract_embedding=False)
+    faces = analyser.get_many_faces([target_frame], extract_embedding=True)
     if not faces:
         return [], None, "⚠️ No faces detected in the current target frame with active detector settings."
 

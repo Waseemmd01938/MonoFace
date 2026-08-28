@@ -127,6 +127,16 @@ class FaceAnalyser:
 
             cached = get_static_faces(vision_frame)
             if cached is not None:
+                if extract_embedding and any(f.embedding_norm is None for f in cached):
+                    updated_faces = []
+                    for f in cached:
+                        if f.embedding_norm is None:
+                            raw_emb, norm_emb, _, _ = self.recognizer.get_embedding(vision_frame, f.landmark_set['5/68'])
+                            updated_faces.append(f._replace(embedding=raw_emb, embedding_norm=norm_emb))
+                        else:
+                            updated_faces.append(f)
+                    cached = updated_faces
+                    set_static_faces(vision_frame, cached)
                 many_faces.extend(cached)
                 continue
 
@@ -327,6 +337,13 @@ def sort_faces_by_order(faces: List[Face], order: str = 'large-small') -> List[F
 
 def calculate_face_distance(face: Face, reference_face: Face) -> float:
     """Calculates normalized cosine distance [0, 1] between two face embeddings."""
+    if face is None or reference_face is None:
+        return 1.0
+    if face is reference_face:
+        return 0.0
+    if hasattr(face, 'bounding_box') and hasattr(reference_face, 'bounding_box'):
+        if np.array_equal(face.bounding_box, reference_face.bounding_box):
+            return 0.0
     if hasattr(face, 'embedding_norm') and hasattr(reference_face, 'embedding_norm'):
         if face.embedding_norm is not None and reference_face.embedding_norm is not None:
             sim = float(np.dot(face.embedding_norm, reference_face.embedding_norm))
@@ -337,6 +354,13 @@ def calculate_face_distance(face: Face, reference_face: Face) -> float:
 
 def compare_faces(face: Face, reference_face: Face, face_distance_threshold: float = 0.6) -> bool:
     """Checks if a target face is within the distance threshold of the reference face."""
+    if face is None or reference_face is None:
+        return False
+    if face is reference_face:
+        return True
+    if hasattr(face, 'bounding_box') and hasattr(reference_face, 'bounding_box'):
+        if np.array_equal(face.bounding_box, reference_face.bounding_box):
+            return True
     return calculate_face_distance(face, reference_face) <= face_distance_threshold
 
 
@@ -376,8 +400,17 @@ def select_target_faces(
 
     if mode == 'reference':
         if reference_face is None:
-            return sorted_faces
-        return find_match_faces([reference_face], sorted_faces, reference_distance)
+            pos = min(max(0, position), len(sorted_faces) - 1)
+            return [sorted_faces[pos]]
+        matched = find_match_faces([reference_face], sorted_faces, reference_distance)
+        if not matched:
+            # Fallback if matching threshold was too restrictive or reference is in the list
+            for f in sorted_faces:
+                if f is reference_face or np.array_equal(f.bounding_box, reference_face.bounding_box):
+                    return [f]
+            pos = min(max(0, position), len(sorted_faces) - 1)
+            return [sorted_faces[pos]]
+        return matched
 
     return sorted_faces
 
