@@ -162,7 +162,8 @@ class FaceAnalyser:
 
         for bbox, score, lm_5 in zip(bounding_boxes, face_scores, face_landmarks_5):
             lm_score_68 = 0.0
-            face_angle = 0
+            lm_68_5 = self.landmarker.estimate_landmark_68_from_5(lm_5)
+            face_angle = estimate_face_angle(lm_68_5)
 
             # Use 68-point dense landmarker if requested, else use fast 5-to-68 estimator
             if self.landmarker_score > 0:
@@ -172,19 +173,16 @@ class FaceAnalyser:
                         lm_68 = detected_68
                         lm_score_68 = score_68
                         lm_5_68 = convert_to_face_landmark_5(lm_68)
-                        lm_68_5 = lm_68
+                        face_angle = estimate_face_angle(lm_68)
                     else:
                         lm_5_68 = lm_5.copy()
-                        lm_68 = self.landmarker.estimate_landmark_68_from_5(lm_5_68)
-                        lm_68_5 = lm_68
+                        lm_68 = lm_68_5
                 except Exception:
                     lm_5_68 = lm_5.copy()
-                    lm_68 = self.landmarker.estimate_landmark_68_from_5(lm_5_68)
-                    lm_68_5 = lm_68
+                    lm_68 = lm_68_5
             else:
                 lm_5_68 = lm_5.copy()
-                lm_68 = self.landmarker.estimate_landmark_68_from_5(lm_5_68)
-                lm_68_5 = lm_68
+                lm_68 = lm_68_5
 
             landmark_set: FaceLandmarkSet = {
                 '5': lm_5,
@@ -252,6 +250,29 @@ class FaceAnalyser:
             race=None
         )
 
+    def sort_faces(self, faces: List[Face], order: str = 'large-small') -> List[Face]:
+        """Sorts faces by spatial or metric order."""
+        return sort_faces_by_order(faces, order)
+
+    def select_faces(
+        self,
+        target_faces: List[Face],
+        mode: str = 'many',
+        order: str = 'large-small',
+        position: int = 0,
+        reference_face: Optional[Face] = None,
+        reference_distance: float = 0.6
+    ) -> List[Face]:
+        """Selects and filters target faces based on mode (many, one, reference) and sort order."""
+        return select_target_faces(
+            target_faces=target_faces,
+            mode=mode,
+            order=order,
+            position=position,
+            reference_face=reference_face,
+            reference_distance=reference_distance
+        )
+
     def find_similar_faces(
         self,
         faces: List[Face],
@@ -266,6 +287,99 @@ class FaceAnalyser:
                 matches.append((face, sim))
         matches.sort(key=lambda x: x[1], reverse=True)
         return matches
+
+
+# -------------------------------------------------------------
+# Face Sorting, Distance & Selection Algorithms
+# -------------------------------------------------------------
+def sort_faces_by_order(faces: List[Face], order: str = 'large-small') -> List[Face]:
+    """
+    Sorts faces according to FaceFusion-compatible order options:
+      - 'left-right': Leftmost face first (x1 ascending)
+      - 'right-left': Rightmost face first (x1 descending)
+      - 'top-bottom': Topmost face first (y1 ascending)
+      - 'bottom-top': Bottommost face first (y1 descending)
+      - 'small-large': Smallest face area first
+      - 'large-small': Largest face area first (default)
+      - 'best-worst': Highest detector confidence score first
+      - 'worst-best': Lowest detector confidence score first
+    """
+    if not faces:
+        return []
+    if order == 'left-right':
+        return sorted(faces, key=lambda f: f.bounding_box[0])
+    if order == 'right-left':
+        return sorted(faces, key=lambda f: f.bounding_box[0], reverse=True)
+    if order == 'top-bottom':
+        return sorted(faces, key=lambda f: f.bounding_box[1])
+    if order == 'bottom-top':
+        return sorted(faces, key=lambda f: f.bounding_box[1], reverse=True)
+    if order == 'small-large':
+        return sorted(faces, key=lambda f: (f.bounding_box[2] - f.bounding_box[0]) * (f.bounding_box[3] - f.bounding_box[1]))
+    if order == 'large-small':
+        return sorted(faces, key=lambda f: (f.bounding_box[2] - f.bounding_box[0]) * (f.bounding_box[3] - f.bounding_box[1]), reverse=True)
+    if order == 'best-worst':
+        return sorted(faces, key=lambda f: f.score_set.get('detector', 0.0) if isinstance(f.score_set, dict) else 0.0, reverse=True)
+    if order == 'worst-best':
+        return sorted(faces, key=lambda f: f.score_set.get('detector', 0.0) if isinstance(f.score_set, dict) else 0.0)
+    return faces
+
+
+def calculate_face_distance(face: Face, reference_face: Face) -> float:
+    """Calculates normalized cosine distance [0, 1] between two face embeddings."""
+    if hasattr(face, 'embedding_norm') and hasattr(reference_face, 'embedding_norm'):
+        if face.embedding_norm is not None and reference_face.embedding_norm is not None:
+            sim = float(np.dot(face.embedding_norm, reference_face.embedding_norm))
+            distance = 1.0 - sim
+            return float(np.interp(distance, [0.0, 2.0], [0.0, 1.0]))
+    return 1.0
+
+
+def compare_faces(face: Face, reference_face: Face, face_distance_threshold: float = 0.6) -> bool:
+    """Checks if a target face is within the distance threshold of the reference face."""
+    return calculate_face_distance(face, reference_face) <= face_distance_threshold
+
+
+def find_match_faces(reference_faces: List[Face], target_faces: List[Face], face_distance: float = 0.6) -> List[Face]:
+    """Finds all target faces that match any given reference face within the distance threshold."""
+    match_faces = []
+    for target_face in target_faces:
+        for ref_face in reference_faces:
+            if ref_face is not None and compare_faces(target_face, ref_face, face_distance):
+                match_faces.append(target_face)
+                break
+    return match_faces
+
+
+def select_target_faces(
+    target_faces: List[Face],
+    mode: str = 'many',
+    order: str = 'large-small',
+    position: int = 0,
+    reference_face: Optional[Face] = None,
+    reference_distance: float = 0.6
+) -> List[Face]:
+    """
+    Selects and filters target faces based on mode ('many', 'one', 'reference') and sort order.
+    """
+    if not target_faces:
+        return []
+
+    sorted_faces = sort_faces_by_order(target_faces, order)
+
+    if mode == 'many':
+        return sorted_faces
+
+    if mode == 'one':
+        pos = min(max(0, position), len(sorted_faces) - 1)
+        return [sorted_faces[pos]]
+
+    if mode == 'reference':
+        if reference_face is None:
+            return sorted_faces
+        return find_match_faces([reference_face], sorted_faces, reference_distance)
+
+    return sorted_faces
 
 
 # Functional API and singleton/caching for compatibility

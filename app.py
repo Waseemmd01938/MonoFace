@@ -1,34 +1,18 @@
 #@title MonoFace - Advanced Face Swapping & Processing Interface
+import glob
 import os
-import sys
-import cv2
-import numpy as np
-import gradio as gr
+import shutil
 import subprocess
 import time
-import shutil
-import glob
-from typing import List, Optional, Tuple, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
 
-from face_analyser import (
-    FaceAnalyser,
-    get_many_faces,
-    get_average_face,
-    clear_face_cache,
-    clear_analyser_memory,
-    preload_face_analyser
-)
-from Face.modules import (
-    FaceSwapper,
-    FaceDetector,
-    FaceLandmarker,
-    FaceMasker,
-    get_inference_session,
-    clear_session_cache,
-    free_memory
-)
-from Face.typing import Face, VisionFrame, Padding
-from downloads import is_model_downloaded, download_model
+import cv2
+import gradio as gr
+import numpy as np
+
+from Face.modules import FaceSwapper, free_memory
+from Face.typing import Face
+from face_analyser import FaceAnalyser, clear_face_cache, preload_face_analyser
 
 # Cached pipeline instance to avoid repeated object recreation
 _CACHED_PIPELINE: Dict[str, Any] = {}
@@ -168,30 +152,53 @@ def create_pipeline(
     mask_areas: Optional[List[str]] = None,
     mask_regions: Optional[List[str]] = None
 ) -> Tuple[FaceAnalyser, FaceSwapper]:
-    # Parse detector resolution
+    global _CACHED_PIPELINE
     det_w, det_h = (int(x) for x in detector_size_str.split('x'))
+    angles_tuple = tuple(int(a) for a in detector_angles) if detector_angles else (0,)
 
-    analyser = FaceAnalyser(
-        detector_model=detector_model,
-        detector_score=detector_score,
-        detector_size=(det_w, det_h),
-        detector_angles=[int(a) for a in detector_angles] if detector_angles else [0],
-        landmarker_model=landmarker_model,
-        landmarker_score=landmarker_score
-    )
-    # Set custom detector margins (% expansion)
-    analyser.detector.margin = (margin_top, margin_right, margin_bottom, margin_left)
+    analyser_key = (detector_model, landmarker_model, det_w, det_h, angles_tuple)
+    if _CACHED_PIPELINE.get('analyser_key') == analyser_key:
+        analyser: FaceAnalyser = _CACHED_PIPELINE['analyser']
+        analyser.detector_score = detector_score
+        analyser.detector.score_threshold = detector_score
+        analyser.landmarker_score = landmarker_score
+        analyser.detector.margin = (margin_top, margin_right, margin_bottom, margin_left)
+    else:
+        analyser = FaceAnalyser(
+            detector_model=detector_model,
+            detector_score=detector_score,
+            detector_size=(det_w, det_h),
+            detector_angles=list(angles_tuple),
+            landmarker_model=landmarker_model,
+            landmarker_score=landmarker_score
+        )
+        analyser.detector.margin = (margin_top, margin_right, margin_bottom, margin_left)
+        _CACHED_PIPELINE['analyser_key'] = analyser_key
+        _CACHED_PIPELINE['analyser'] = analyser
 
-    swapper = FaceSwapper(
-        model_name=swapper_model,
-        weight=swapper_weight,
-        pixel_boost=pixel_boost,
-        mask_types=mask_types,
-        mask_blur=mask_blur,
-        mask_padding=(mask_padding_top, mask_padding_right, mask_padding_bottom, mask_padding_left),
-        mask_areas=mask_areas,
-        mask_regions=mask_regions
-    )
+    swapper_key = (swapper_model, pixel_boost)
+    if _CACHED_PIPELINE.get('swapper_key') == swapper_key:
+        swapper: FaceSwapper = _CACHED_PIPELINE['swapper']
+        swapper.weight = swapper_weight
+        swapper.mask_types = mask_types
+        swapper.mask_blur = mask_blur
+        swapper.mask_padding = (mask_padding_top, mask_padding_right, mask_padding_bottom, mask_padding_left)
+        swapper.mask_areas = mask_areas
+        swapper.mask_regions = mask_regions
+    else:
+        swapper = FaceSwapper(
+            model_name=swapper_model,
+            weight=swapper_weight,
+            pixel_boost=pixel_boost,
+            mask_types=mask_types,
+            mask_blur=mask_blur,
+            mask_padding=(mask_padding_top, mask_padding_right, mask_padding_bottom, mask_padding_left),
+            mask_areas=mask_areas,
+            mask_regions=mask_regions
+        )
+        _CACHED_PIPELINE['swapper_key'] = swapper_key
+        _CACHED_PIPELINE['swapper'] = swapper
+
     swapper.masker.occluder_model = occluder_model
 
     return analyser, swapper
@@ -204,11 +211,10 @@ def get_source_face_from_paths(analyser: FaceAnalyser, source_paths: List[str]) 
         faces = analyser.get_many_faces([img])
         if faces:
             # Pick largest detected face
-            largest_face = sorted(
+            largest_face = max(
                 faces,
-                key=lambda f: (f.bounding_box[2] - f.bounding_box[0]) * (f.bounding_box[3] - f.bounding_box[1]),
-                reverse=True
-            )[0]
+                key=lambda f: (f.bounding_box[2] - f.bounding_box[0]) * (f.bounding_box[3] - f.bounding_box[1])
+            )
             source_faces.append(largest_face)
 
     if not source_faces:
@@ -238,6 +244,10 @@ def preview_swap_frame(
     margin_left: int,
     landmarker_model: str,
     landmarker_score: float,
+    face_selector_mode: str,
+    face_selector_order: str,
+    face_selector_position: int,
+    reference_face_distance: float,
     mask_types: List[str],
     mask_blur: float,
     mask_padding_top: int,
@@ -294,13 +304,28 @@ def preview_swap_frame(
         if not ok or target_frame is None:
             raise gr.Error("Failed to read video frame at requested index.")
 
-    target_faces = analyser.get_many_faces([target_frame])
+    # In preview mode, always extract embeddings to support reference matching
+    target_faces = analyser.get_many_faces([target_frame], extract_embedding=True)
     if not target_faces:
-        # Return original frame with a notification
         return cv2.cvtColor(target_frame, cv2.COLOR_BGR2RGB)
 
+    reference_face = None
+    if face_selector_mode == 'reference':
+        sorted_all = analyser.sort_faces(target_faces, face_selector_order)
+        ref_idx = min(max(0, int(face_selector_position)), len(sorted_all) - 1)
+        reference_face = sorted_all[ref_idx]
+
+    selected_faces = analyser.select_faces(
+        target_faces=target_faces,
+        mode=face_selector_mode,
+        order=face_selector_order,
+        position=int(face_selector_position),
+        reference_face=reference_face,
+        reference_distance=float(reference_face_distance)
+    )
+
     result_frame = target_frame.copy()
-    for target_face in target_faces:
+    for target_face in selected_faces:
         result_frame = swapper.swap_face(
             source_face=source_face,
             target_face=target_face,
@@ -339,6 +364,10 @@ def run_batch_swap(
     margin_left: int,
     landmarker_model: str,
     landmarker_score: float,
+    face_selector_mode: str,
+    face_selector_order: str,
+    face_selector_position: int,
+    reference_face_distance: float,
     mask_types: List[str],
     mask_blur: float,
     mask_padding_top: int,
@@ -391,13 +420,31 @@ def run_batch_swap(
     if ext in IMAGE_EXTS:
         progress(0.4, desc="Swapping faces in image...")
         img = read_image(target_file)
-        target_faces = analyser.get_many_faces([img])
+        target_faces = analyser.get_many_faces([img], extract_embedding=True)
 
         if not target_faces:
             raise gr.Error("No faces detected in target image with current detector settings.")
 
+        reference_face = None
+        if face_selector_mode == 'reference':
+            sorted_all = analyser.sort_faces(target_faces, face_selector_order)
+            ref_idx = min(max(0, int(face_selector_position)), len(sorted_all) - 1)
+            reference_face = sorted_all[ref_idx]
+
+        selected_faces = analyser.select_faces(
+            target_faces=target_faces,
+            mode=face_selector_mode,
+            order=face_selector_order,
+            position=int(face_selector_position),
+            reference_face=reference_face,
+            reference_distance=float(reference_face_distance)
+        )
+
+        if not selected_faces:
+            raise gr.Error("No matching faces found for the specified selector criteria.")
+
         res = img.copy()
-        for target_face in target_faces:
+        for target_face in selected_faces:
             res = swapper.swap_face(
                 source_face,
                 target_face,
@@ -410,7 +457,7 @@ def run_batch_swap(
         out_img_path = os.path.join(output_dir, f"swapped_{target_name}.png")
         cv2.imwrite(out_img_path, res)
         progress(1.0, desc="Completed!")
-        return out_img_path, None, f"✅ Image swap completed ({len(target_faces)} face(s) swapped)."
+        return out_img_path, None, f"✅ Image swap completed ({len(selected_faces)} face(s) swapped)."
 
     # ------------------
     # Video Target Mode
@@ -442,16 +489,37 @@ def run_batch_swap(
     if total_frames == 0:
         raise gr.Error("No frames extracted! Please check your trim settings.")
 
-    print(f"🚀 Processing {total_frames} frames using {swapper_model} (Pixel Boost: {pixel_boost})...")
+    print(f"🚀 Processing {total_frames} frames using {swapper_model} (Mode: {face_selector_mode}, Order: {face_selector_order}, Pixel Boost: {pixel_boost})...")
     start_time = time.time()
     prepared_source_embedding = swapper.prepare_source_embedding(source_face)
 
+    # Establish reference face identity if running in reference selector mode
+    reference_face = None
+    if face_selector_mode == 'reference' and total_frames > 0:
+        first_frame = cv2.imread(frame_files[0])
+        first_faces = analyser.get_many_faces([first_frame], extract_embedding=True)
+        if first_faces:
+            sorted_first = analyser.sort_faces(first_faces, face_selector_order)
+            ref_idx = min(max(0, int(face_selector_position)), len(sorted_first) - 1)
+            reference_face = sorted_first[ref_idx]
+            print(f"🎯 Reference face identity established (Position: {ref_idx}, Order: {face_selector_order})")
+
+    need_embeddings = (face_selector_mode == 'reference')
+
     for idx, frame_path in enumerate(frame_files):
         frame = cv2.imread(frame_path)
-        target_faces = analyser.get_many_faces([frame], extract_embedding=False)
+        target_faces = analyser.get_many_faces([frame], extract_embedding=need_embeddings)
 
         if target_faces:
-            for target_face in target_faces:
+            selected_faces = analyser.select_faces(
+                target_faces=target_faces,
+                mode=face_selector_mode,
+                order=face_selector_order,
+                position=int(face_selector_position),
+                reference_face=reference_face,
+                reference_distance=float(reference_face_distance)
+            )
+            for target_face in selected_faces:
                 frame = swapper.swap_face(
                     source_face,
                     target_face,
@@ -686,6 +754,46 @@ with gr.Blocks(title="MonoFace Pro") as demo:
                 margin_left = gr.Slider(0, 100, value=0, step=1, label="Face Margin Left (%)")
 
     # -------------------------------------------------------------
+    # Face Selector & Sorting Controls
+    # -------------------------------------------------------------
+    with gr.Tab("🎯 Face Selector & Sorting"):
+        with gr.Row():
+            face_selector_mode = gr.Dropdown(
+                choices=["many", "one", "reference"],
+                value="many",
+                label="Face Selector Mode (many=All faces, one=Single face, reference=Match reference face)"
+            )
+            face_selector_order = gr.Dropdown(
+                choices=[
+                    "large-small",
+                    "small-large",
+                    "left-right",
+                    "right-left",
+                    "top-bottom",
+                    "bottom-top",
+                    "best-worst",
+                    "worst-best"
+                ],
+                value="large-small",
+                label="Face Sorting Order"
+            )
+        with gr.Row():
+            face_selector_position = gr.Slider(
+                minimum=0,
+                maximum=10,
+                step=1,
+                value=0,
+                label="Face Selector Position / Index (0=First sorted face)"
+            )
+            reference_face_distance = gr.Slider(
+                minimum=0.0,
+                maximum=1.0,
+                step=0.05,
+                value=0.6,
+                label="Reference Face Distance Threshold (Lower = stricter match)"
+            )
+
+    # -------------------------------------------------------------
     # Masking & Blending Controls
     # -------------------------------------------------------------
     with gr.Tab("🎭 Face Masking & Occlusion"):
@@ -783,6 +891,10 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         margin_left,
         landmarker_model,
         landmarker_score,
+        face_selector_mode,
+        face_selector_order,
+        face_selector_position,
+        reference_face_distance,
         mask_types,
         mask_blur,
         mask_padding_top,

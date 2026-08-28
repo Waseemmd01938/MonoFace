@@ -7,6 +7,18 @@ Scale: TypeAlias = float
 Score: TypeAlias = float
 Angle: TypeAlias = int
 
+FaceSelectorMode: TypeAlias = Literal['many', 'one', 'reference']
+FaceSelectorOrder: TypeAlias = Literal[
+    'left-right',
+    'right-left',
+    'top-bottom',
+    'bottom-top',
+    'small-large',
+    'large-small',
+    'best-worst',
+    'worst-best'
+]
+
 Detection: TypeAlias = NDArray[Any]
 Prediction: TypeAlias = NDArray[Any]
 
