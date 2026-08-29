@@ -1503,6 +1503,14 @@ with gr.Blocks(title="MonoFace Studio Pro") as demo:
     )
 
 if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="MonoFace Studio")
+    parser.add_argument("--share", type=str, default="False", help="Share the app")
+    parser.add_argument("--inbrowser", type=str, default="True", help="Open in browser")
+    # parser.add_argument("--server-name", type=str, default="[IP_ADDRESS]", help="Server name")
+    args = parser.parse_args()
+    
     providers = onnxruntime.get_available_providers()
     print(f"🔥 Active ONNX Runtime Execution Providers: {providers}")
     if "CUDAExecutionProvider" not in providers:
@@ -1515,5 +1523,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"⚠️ Note: Face analyser models will load on first inference ({e})")
 
-    demo.launch(share=True, inbrowser=True, server_name="0.0.0.0", theme=theme, css=custom_css)
+    demo.launch(share=args.share, inbrowser=args.inbrowser, theme=theme, css=custom_css)
 
