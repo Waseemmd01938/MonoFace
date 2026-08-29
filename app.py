@@ -261,48 +261,52 @@ def update_reference_face_gallery(
     if not target_file:
         return [], "Upload a target image or video to inspect detected faces."
 
-    _, ext = safe_filename(target_file)
-    if ext in IMAGE_EXTS:
-        target_frame = read_image(target_file)
-    else:
-        cap = cv2.VideoCapture(target_file)
-        if not cap.isOpened():
-            return [], "Failed to open target video."
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        frame_idx = int(np.clip(frame_index, 0, max(0, total_frames - 1)))
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        ok, target_frame = cap.read()
-        cap.release()
-        if not ok or target_frame is None:
-            return [], "Failed to read target frame."
+    try:
+        _, ext = safe_filename(target_file)
+        if ext in IMAGE_EXTS:
+            target_frame = read_image(target_file)
+        else:
+            cap = cv2.VideoCapture(target_file)
+            if not cap.isOpened():
+                return [], "Failed to open target video."
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            frame_idx = int(np.clip(frame_index, 0, max(0, total_frames - 1)))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ok, target_frame = cap.read()
+            cap.release()
+            if not ok or target_frame is None:
+                return [], "Failed to read target frame."
 
-    det_w, det_h = (int(x) for x in detector_size_str.split('x'))
-    analyser = FaceAnalyser(
-        detector_model=detector_model,
-        detector_score=detector_score,
-        detector_size=(det_w, det_h),
-        detector_angles=[int(a) for a in detector_angles] if detector_angles else [0],
-        landmarker_model=landmarker_model,
-        landmarker_score=landmarker_score
-    )
-    analyser.detector.margin = (margin_top, margin_right, margin_bottom, margin_left)
+        det_w, det_h = (int(x) for x in detector_size_str.split('x'))
+        analyser = FaceAnalyser(
+            detector_model=detector_model,
+            detector_score=detector_score,
+            detector_size=(det_w, det_h),
+            detector_angles=[int(a) for a in detector_angles] if detector_angles else [0],
+            landmarker_model=landmarker_model,
+            landmarker_score=landmarker_score
+        )
+        analyser.detector.margin = (margin_top, margin_right, margin_bottom, margin_left)
 
-    faces = analyser.get_many_faces([target_frame], extract_embedding=True)
-    if not faces:
-        return [], "⚠️ No faces detected in the current target frame with active detector settings."
+        faces = analyser.get_many_faces([target_frame], extract_embedding=True)
+        if not faces:
+            return [], "⚠️ No faces detected in the current target frame with active detector settings."
 
-    sorted_faces = analyser.sort_faces(faces, face_selector_order)
-    gallery_items = []
-    for idx, f in enumerate(sorted_faces):
-        avatar = crop_face_avatar(target_frame, f)
-        score = f.score_set.get('detector', 0.0) if isinstance(f.score_set, dict) else 0.0
-        caption = f"Face #{idx} (Score: {score:.2f})"
-        gallery_items.append((avatar, caption))
+        sorted_faces = analyser.sort_faces(faces, face_selector_order)
+        gallery_items = []
+        for idx, f in enumerate(sorted_faces):
+            avatar = crop_face_avatar(target_frame, f)
+            score = f.score_set.get('detector', 0.0) if isinstance(f.score_set, dict) else 0.0
+            caption = f"Face #{idx} (Score: {score:.2f})"
+            gallery_items.append((avatar, caption))
 
-    sel_idx = min(max(0, int(face_selector_position)), len(sorted_faces) - 1)
-    status = f"✅ Detected {len(sorted_faces)} face(s). Currently selected: Face #{sel_idx}."
+        sel_pos = int(face_selector_position) if isinstance(face_selector_position, (int, float, str)) else 0
+        sel_idx = min(max(0, sel_pos), len(sorted_faces) - 1)
+        status = f"✅ Detected {len(sorted_faces)} face(s). Currently selected: Face #{sel_idx}."
 
-    return gallery_items, status
+        return gallery_items, status
+    except Exception as e:
+        return [], f"⚠️ Face detection error: {str(e)}"
 
 
 # -----------------------------------------
@@ -1379,8 +1383,12 @@ with gr.Blocks(title="MonoFace Studio Pro") as demo:
     ]
 
     def on_reference_gallery_select(evt: gr.SelectData):
-        selected_idx = evt.index
-        return selected_idx, f"🎯 Selected Face #{selected_idx} as active target/reference face."
+        try:
+            raw_idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else evt.index
+            selected_idx = int(raw_idx)
+            return selected_idx, f"🎯 Selected Face #{selected_idx} as active target/reference face."
+        except Exception:
+            return 0, "🎯 Selected Face #0 as active target/reference face."
 
     ref_gallery.select(
         fn=on_reference_gallery_select,
@@ -1528,12 +1536,22 @@ if __name__ == "__main__":
     except Exception:
         pass
 
-    demo.launch(
-        share=args.share,
-        inbrowser=args.inbrowser,
-        server_name="0.0.0.0",
-        server_port=7860,
-        theme=theme,
-        css=custom_css
-    )
+    try:
+        demo.launch(
+            share=args.share,
+            inbrowser=args.inbrowser,
+            server_name="0.0.0.0",
+            server_port=7860,
+            theme=theme,
+            css=custom_css
+        )
+    except OSError:
+        print("⚠️ Port 7860 occupied. Falling back to automatically selected open port...")
+        demo.launch(
+            share=args.share,
+            inbrowser=args.inbrowser,
+            server_name="0.0.0.0",
+            theme=theme,
+            css=custom_css
+        )
 
