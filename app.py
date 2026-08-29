@@ -715,252 +715,647 @@ def update_ui_for_target(target_file: Optional[str]):
 
 
 # -----------------------------------------
-# 6) Gradio Interface Layout
+# 6) Gradio Interface Layout & Modern Studio Theme
 # -----------------------------------------
+import onnxruntime
+
+def get_hw_info_badge() -> str:
+    providers = onnxruntime.get_available_providers()
+    if "CUDAExecutionProvider" in providers:
+        return '<span class="hw-badge hw-gpu">⚡ GPU ACCELERATION: CUDA ACTIVE</span>'
+    return '<span class="hw-badge hw-cpu">💻 CPU INFERENCE MODE</span>'
+
 custom_css = """
-.gradio-container { max-width: 1100px !important; margin: auto; }
-.header-badge { font-size: 0.85rem; color: #10b981; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
-.section-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem; }
+/* ==========================================================================
+   MonoFace Pro Studio - Modern Glassmorphism & Responsive Design System
+   ========================================================================== */
+
+:root {
+    --mf-primary: #6366f1;
+    --mf-primary-hover: #4f46e5;
+    --mf-accent: #8b5cf6;
+    --mf-cyan: #06b6d4;
+    --mf-emerald: #10b981;
+    --mf-dark-bg: #0b0f19;
+    --mf-card-bg: rgba(17, 24, 39, 0.75);
+    --mf-card-border: rgba(99, 102, 241, 0.2);
+    --mf-card-border-hover: rgba(139, 92, 246, 0.4);
+    --mf-text-main: #f3f4f6;
+    --mf-text-muted: #9ca3af;
+}
+
+/* Global Container & Typography */
+.gradio-container {
+    max-width: 1500px !important;
+    width: 96% !important;
+    margin: 0 auto !important;
+    padding: 1rem !important;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    color: var(--mf-text-main) !important;
+}
+
+/* Hide default gradio footer */
 footer { display: none !important; }
+
+/* Studio Header Styling */
+.studio-header {
+    background: linear-gradient(135deg, rgba(30, 27, 75, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 20px;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.25rem;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 0 30px -10px rgba(99, 102, 241, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.studio-header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #6366f1, #8b5cf6, #06b6d4, #10b981);
+}
+
+.studio-header-content {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.studio-title-group h1 {
+    font-size: 1.85rem !important;
+    font-weight: 800 !important;
+    margin: 0 !important;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #ffffff 30%, #c7d2fe 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.studio-subtitle {
+    color: var(--mf-text-muted);
+    font-size: 0.88rem;
+    margin-top: 0.35rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.header-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.feature-pill {
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    color: #a5b4fc;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.65rem;
+    border-radius: 9999px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.hw-badge {
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 0.35rem 0.85rem;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    letter-spacing: 0.5px;
+}
+
+.hw-gpu {
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.5);
+    color: #34d399;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+.hw-cpu {
+    background: rgba(245, 158, 11, 0.2);
+    border: 1px solid rgba(245, 158, 11, 0.5);
+    color: #fbbf24;
+}
+
+/* Glassmorphic Card Containers */
+.studio-card {
+    background: var(--mf-card-bg) !important;
+    border: 1px solid var(--mf-card-border) !important;
+    border-radius: 18px !important;
+    padding: 1.25rem !important;
+    backdrop-filter: blur(12px) !important;
+    box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.25) !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    margin-bottom: 1rem !important;
+}
+
+.studio-card:hover {
+    border-color: var(--mf-card-border-hover) !important;
+}
+
+.card-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #f3f4f6;
+    margin-bottom: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Tab Bar Styling */
+.tab-nav {
+    border-bottom: 1px solid rgba(99, 102, 241, 0.2) !important;
+    background: transparent !important;
+    gap: 0.35rem !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    scrollbar-width: thin;
+}
+
+.tab-nav button {
+    border-radius: 10px 10px 0 0 !important;
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+    padding: 0.6rem 1rem !important;
+    color: var(--mf-text-muted) !important;
+    transition: all 0.2s ease !important;
+    white-space: nowrap !important;
+}
+
+.tab-nav button.selected {
+    color: #ffffff !important;
+    background: rgba(99, 102, 241, 0.15) !important;
+    border-bottom: 2px solid var(--mf-primary) !important;
+}
+
+/* File Uploaders */
+.file-upload-compact {
+    min-height: 140px !important;
+}
+
+/* Hero Run CTA Button */
+.run-btn-hero {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #4f46e5 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+    font-size: 1.05rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.5px !important;
+    padding: 0.9rem 1.5rem !important;
+    border-radius: 14px !important;
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4) !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    cursor: pointer !important;
+    width: 100% !important;
+}
+
+.run-btn-hero:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 25px rgba(139, 92, 246, 0.5) !important;
+}
+
+.run-btn-hero:active {
+    transform: scale(0.98) !important;
+}
+
+/* Preview CTA Button */
+.preview-btn {
+    background: linear-gradient(135deg, #374151 0%, #1f2937 100%) !important;
+    border: 1px solid rgba(99, 102, 241, 0.4) !important;
+    color: #e0e7ff !important;
+    font-weight: 700 !important;
+    border-radius: 12px !important;
+    transition: all 0.2s ease !important;
+}
+
+.preview-btn:hover {
+    background: rgba(99, 102, 241, 0.25) !important;
+    border-color: #8b5cf6 !important;
+}
+
+/* Cancel Runtime CTA Button */
+.cancel-btn {
+    background: rgba(239, 68, 68, 0.15) !important;
+    border: 1px solid rgba(239, 68, 68, 0.4) !important;
+    color: #f87171 !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    border-radius: 14px !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    cursor: pointer !important;
+}
+
+.cancel-btn:hover {
+    background: rgba(239, 68, 68, 0.3) !important;
+    border-color: #ef4444 !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.35) !important;
+}
+
+.cancel-btn:active {
+    transform: scale(0.98) !important;
+}
+
+/* Terminal-like Status Log */
+.status-log textarea {
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace !important;
+    font-size: 0.85rem !important;
+    background: #060913 !important;
+    color: #38bdf8 !important;
+    border: 1px solid rgba(56, 189, 248, 0.2) !important;
+    border-radius: 12px !important;
+}
+
+/* Sliders & Interactive Elements */
+input[type="range"] {
+    accent-color: #6366f1 !important;
+}
+
+/* Reference Face Gallery */
+.ref-face-gallery {
+    border-radius: 12px !important;
+    background: rgba(15, 23, 42, 0.6) !important;
+    border: 1px solid rgba(99, 102, 241, 0.2) !important;
+}
+
+/* ==========================================================================
+   Responsive Breakpoints: Desktop (2-Col Studio) vs Mobile (Adaptive Stack)
+   ========================================================================== */
+
+@media (min-width: 1024px) {
+    .studio-grid {
+        display: grid !important;
+        grid-template-columns: 1.15fr 0.85fr !important;
+        gap: 1.25rem !important;
+        align-items: start !important;
+    }
+    
+    .sticky-preview-deck {
+        position: sticky !important;
+        top: 1rem !important;
+        z-index: 10 !important;
+    }
+}
+
+@media (max-width: 1023px) {
+    .gradio-container {
+        width: 100% !important;
+        padding: 0.5rem !important;
+    }
+    
+    .studio-header {
+        padding: 1.25rem 1rem !important;
+        border-radius: 14px !important;
+    }
+    
+    .studio-title-group h1 {
+        font-size: 1.45rem !important;
+    }
+    
+    .studio-card {
+        padding: 1rem !important;
+        border-radius: 14px !important;
+    }
+    
+    .tab-nav button {
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.8rem !important;
+    }
+    
+    .run-btn-hero {
+        font-size: 0.95rem !important;
+        padding: 0.8rem 1.2rem !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .studio-header-content {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .header-badges {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
 """
 
 theme = gr.themes.Soft(
     primary_hue="indigo",
-    secondary_hue="slate"
+    secondary_hue="slate",
+    neutral_hue="slate",
+    font=[gr.themes.GoogleFont("Inter"), "system-ui", "sans-serif"]
+).set(
+    body_background_fill="#0b0f19",
+    body_background_fill_dark="#0b0f19",
+    block_background_fill="rgba(17, 24, 39, 0.75)",
+    block_background_fill_dark="rgba(17, 24, 39, 0.75)",
+    block_border_color="rgba(99, 102, 241, 0.2)",
+    block_border_color_dark="rgba(99, 102, 241, 0.2)",
+    block_radius="14px",
+    button_primary_background_fill="linear-gradient(135deg, #6366f1, #8b5cf6)",
+    button_primary_background_fill_dark="linear-gradient(135deg, #6366f1, #8b5cf6)",
+    button_primary_text_color="#ffffff",
+    button_primary_radius="12px"
 )
 
-with gr.Blocks(title="MonoFace Pro") as demo:
-    gr.Markdown(
-        """
-        # ⚡ MonoFace Studio: Next-Gen Face Swapping Pipeline
-        <span class='header-badge'>High Performance • Multi-Model Architecture • Precision Masking • Pixel Boost</span>
+with gr.Blocks(title="MonoFace Studio Pro", theme=theme, css=custom_css) as demo:
+    # -------------------------------------------------------------
+    # Studio Header
+    # -------------------------------------------------------------
+    gr.HTML(
+        f"""
+        <div class="studio-header">
+            <div class="studio-header-content">
+                <div class="studio-title-group">
+                    <h1>⚡ MonoFace Studio Pro</h1>
+                    <div class="studio-subtitle">
+                        <span>High-Fidelity AI Face Swapping & Video Pipeline</span>
+                        <div class="header-badges">
+                            <span class="feature-pill">🎯 Multi-Detector</span>
+                            <span class="feature-pill">✨ Super-Res Boost</span>
+                            <span class="feature-pill">🎭 Precision Masking</span>
+                            <span class="feature-pill">🎞️ Real-time Preview</span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    {get_hw_info_badge()}
+                </div>
+            </div>
+        </div>
         """
     )
 
-    with gr.Row():
-        src_files = gr.File(
-            label="Source Face Image(s)",
-            file_count="multiple",
-            type="filepath",
-            file_types=["image"]
-        )
-        tgt_file = gr.File(
-            label="Target Image or Video",
-            file_count="single",
-            type="filepath",
-            file_types=["image", "video"]
-        )
+    # -------------------------------------------------------------
+    # Main Responsive Studio Layout
+    # -------------------------------------------------------------
+    with gr.Row(elem_classes=["studio-grid"]):
+        # =========================================================
+        # LEFT COLUMN: Media Inputs & Pipeline Configuration
+        # =========================================================
+        with gr.Column():
+            # 1. Media Upload Hub Card
+            with gr.Group(elem_classes=["studio-card"]):
+                gr.HTML("<div class='card-title'>📁 Step 1: Input Media Assets</div>")
+                with gr.Row():
+                    src_files = gr.File(
+                        label="Source Face Image(s)",
+                        file_count="multiple",
+                        type="filepath",
+                        file_types=["image"],
+                        elem_classes=["file-upload-compact"]
+                    )
+                    tgt_file = gr.File(
+                        label="Target Image or Video",
+                        file_count="single",
+                        type="filepath",
+                        file_types=["image", "video"],
+                        elem_classes=["file-upload-compact"]
+                    )
+                
+                # Video Statistics Bar
+                with gr.Row():
+                    orig_fps = gr.Textbox(label="Original Video FPS", value="0.0", interactive=False, scale=1)
+                    total_duration = gr.Textbox(label="Total Duration (seconds)", value="0.0", interactive=False, scale=1)
 
-    # Info & Video Statistics
-    with gr.Row():
-        orig_fps = gr.Textbox(label="Original Video FPS", value="0.0", interactive=False)
-        total_duration = gr.Textbox(label="Total Duration (seconds)", value="0.0", interactive=False)
+            # 2. Pipeline Controls Card (Organized in Modular Tabs)
+            with gr.Group(elem_classes=["studio-card"]):
+                gr.HTML("<div class='card-title'>🎛️ Step 2: Advanced Pipeline Configuration</div>")
+                
+                with gr.Tabs(elem_classes=["tab-nav"]):
+                    # Tab A: Swapper & Model Options
+                    with gr.Tab("⚙️ Swapper & Model"):
+                        with gr.Row():
+                            swapper_model = gr.Dropdown(
+                                choices=[
+                                    "inswapper_128_fp16",
+                                    "inswapper_128",
+                                    "hyperswap_1a_256",
+                                    "hyperswap_1b_256",
+                                    "hyperswap_1c_256",
+                                    "simswap_256",
+                                    "simswap_512_unofficial"
+                                ],
+                                value="inswapper_128_fp16",
+                                label="Face Swapper Model"
+                            )
+                            pixel_boost = gr.Dropdown(
+                                choices=["none", "128x128", "256x256", "384x384", "512x512", "768x768", "1024x1024"],
+                                value="none",
+                                label="Pixel Boost (Super-Resolution)"
+                            )
+                        swapper_weight = gr.Slider(
+                            minimum=0.0,
+                            maximum=1.0,
+                            value=0.5,
+                            step=0.05,
+                            label="Swapper Identity Balance (0=Target, 1=Source)"
+                        )
+
+                    # Tab B: Detection & Landmarker
+                    with gr.Tab("🎯 Detection & Landmarker"):
+                        with gr.Row():
+                            detector_model = gr.Dropdown(
+                                choices=["yolo_face", "scrfd", "retinaface", "yunet"],
+                                value="yolo_face",
+                                label="Face Detector Model"
+                            )
+                            detector_size = gr.Dropdown(
+                                choices=["320x320", "480x480", "512x512", "640x640", "768x768", "960x960", "1024x1024"],
+                                value="640x640",
+                                label="Detector Input Size"
+                            )
+                            detector_score = gr.Slider(
+                                minimum=0.1,
+                                maximum=1.0,
+                                value=0.5,
+                                step=0.05,
+                                label="Detector Score Threshold"
+                            )
+
+                        with gr.Row():
+                            detector_angles = gr.CheckboxGroup(
+                                choices=[0, 90, 180, 270],
+                                value=[0],
+                                label="Detector Angles (Rotational Search)"
+                            )
+                            landmarker_model = gr.Dropdown(
+                                choices=["2dfan4", "peppa_wutz"],
+                                value="2dfan4",
+                                label="Face Landmarker Model"
+                            )
+                            landmarker_score = gr.Slider(
+                                minimum=0.0,
+                                maximum=1.0,
+                                value=0.0,
+                                step=0.05,
+                                label="Landmarker Threshold (0.0=Fast 5-pt)"
+                            )
+
+                        # Margin expansion accordion
+                        with gr.Accordion("📐 Face Margins / Detector Expansion (%)", open=False):
+                            with gr.Row():
+                                margin_top = gr.Slider(0, 100, value=0, step=1, label="Margin Top (%)")
+                                margin_right = gr.Slider(0, 100, value=0, step=1, label="Margin Right (%)")
+                            with gr.Row():
+                                margin_bottom = gr.Slider(0, 100, value=0, step=1, label="Margin Bottom (%)")
+                                margin_left = gr.Slider(0, 100, value=0, step=1, label="Margin Left (%)")
+
+                    # Tab C: Face Selector & Reference
+                    with gr.Tab("👤 Face Selector & Reference"):
+                        with gr.Row():
+                            face_selector_mode = gr.Dropdown(
+                                choices=["many", "reference"],
+                                value="many",
+                                label="Selector Mode (many=All faces, reference=Match target)"
+                            )
+                            face_selector_order = gr.Dropdown(
+                                choices=[
+                                    "large-small",
+                                    "small-large",
+                                    "left-right",
+                                    "right-left",
+                                    "top-bottom",
+                                    "bottom-top",
+                                    "best-worst",
+                                    "worst-best"
+                                ],
+                                value="large-small",
+                                label="Face Sorting Order"
+                            )
+                        
+                        reference_face_distance = gr.Slider(
+                            minimum=0.0,
+                            maximum=1.0,
+                            step=0.05,
+                            value=0.3,
+                            label="Reference Face Distance Threshold",
+                            visible=False
+                        )
+
+                        # Internal state for selected target face position index
+                        face_selector_position = gr.State(value=0)
+
+                        with gr.Group(visible=False) as reference_container:
+                            gr.Markdown("#### 🔍 Detected Faces in Frame (Click to select Reference Face):")
+                            ref_gallery = gr.Gallery(
+                                label="Detected Faces",
+                                columns=4,
+                                height=180,
+                                allow_preview=False,
+                                object_fit="cover",
+                                elem_classes=["ref-face-gallery"]
+                            )
+                            ref_status = gr.Markdown("Load a target image/video or adjust preview slider to detect faces.")
+
+                    # Tab D: Masking & Occlusion
+                    with gr.Tab("🎭 Masking & Occlusion"):
+                        with gr.Row():
+                            mask_types = gr.CheckboxGroup(
+                                choices=["box", "occlusion", "region", "area"],
+                                value=["box"],
+                                label="Active Mask Types"
+                            )
+                            occluder_model = gr.Dropdown(
+                                choices=["xseg_1", "xseg_2", "xseg_3"],
+                                value="xseg_1",
+                                label="Occlusion Model"
+                            )
+
+                        mask_blur = gr.Slider(
+                            minimum=0.0,
+                            maximum=1.0,
+                            value=0.3,
+                            step=0.05,
+                            label="Mask Feather / Box Blur"
+                        )
+
+                        with gr.Row():
+                            mask_areas = gr.CheckboxGroup(
+                                choices=["upper-face", "lower-face", "mouth", "eyes", "nose"],
+                                value=["upper-face", "lower-face", "mouth", "eyes", "nose"],
+                                label="Landmark Areas ('area' mask)"
+                            )
+                        with gr.Row():
+                            mask_regions = gr.CheckboxGroup(
+                                choices=["skin", "left-eyebrow", "right-eyebrow", "left-eye", "right-eye", "nose", "mouth", "upper-lip", "lower-lip"],
+                                value=["skin", "left-eyebrow", "right-eyebrow", "left-eye", "right-eye", "nose", "mouth", "upper-lip", "lower-lip"],
+                                label="Semantic Regions ('region' mask)"
+                            )
+
+                        with gr.Accordion("✂️ Mask Padding Margins (%)", open=False):
+                            with gr.Row():
+                                mask_padding_top = gr.Slider(0, 100, value=0, step=1, label="Padding Top (%)")
+                                mask_padding_right = gr.Slider(0, 100, value=0, step=1, label="Padding Right (%)")
+                            with gr.Row():
+                                mask_padding_bottom = gr.Slider(0, 100, value=0, step=1, label="Padding Bottom (%)")
+                                mask_padding_left = gr.Slider(0, 100, value=0, step=1, label="Padding Left (%)")
+
+                    # Tab E: Video Trimming & Encoding
+                    with gr.Tab("✂️ Trimming & Encoding"):
+                        trim_mode = gr.Radio(["Seconds", "Frames"], value="Seconds", label="Trim Mode")
+                        with gr.Row():
+                            start_sec = gr.Number(label="Start Time (sec)", value=0.0)
+                            end_sec = gr.Number(label="End Time (sec, 0=Full)", value=0.0)
+                        with gr.Row():
+                            start_frame = gr.Number(label="Start Frame", value=0)
+                            end_frame = gr.Number(label="End Frame (0=Full)", value=0)
+                        with gr.Row():
+                            frame_quality = gr.Slider(0, 100, value=80, step=1, label="Output Frame Quality (0-100)")
+                            fps_override = gr.Slider(0, 120, value=0, step=1, label="FPS Override (0=Same as Target)")
+
+        # =========================================================
+        # RIGHT COLUMN: Interactive Live Preview & Execution Studio
+        # =========================================================
+        with gr.Column(elem_classes=["sticky-preview-deck"]):
+            # 3. Interactive Frame Preview Inspector
+            with gr.Group(visible=False, elem_classes=["studio-card"]) as preview_box:
+                gr.HTML("<div class='card-title'>🎞️ Step 3: Interactive Frame Inspector</div>")
+                with gr.Row():
+                    frame_slider = gr.Slider(minimum=0, maximum=1, step=1, value=0, label="Target Video Frame Index", scale=3)
+                    preview_btn = gr.Button("👁️ Preview Frame", variant="secondary", scale=2, elem_classes=["preview-btn"])
+                preview_output = gr.Image(label="Live Single-Frame Swap Preview", type="numpy")
+
+            # 4. Primary Run Action & Live Status Deck
+            with gr.Group(elem_classes=["studio-card"]):
+                gr.HTML("<div class='card-title'>🚀 Step 4: Execution & Status</div>")
+                with gr.Row():
+                    run_btn = gr.Button("⚡ RUN MONOFACE", variant="primary", scale=3, elem_classes=["run-btn-hero"])
+                    cancel_btn = gr.Button("⏹️ CANCEL RUNTIME", variant="stop", scale=2, elem_classes=["cancel-btn"])
+                status_box = gr.Textbox(
+                    label="Status & Execution Log",
+                    value="Ready to process. Upload source & target files to begin.",
+                    interactive=False,
+                    lines=3,
+                    elem_classes=["status-log"]
+                )
+
+            # 5. Output Showcase
+            with gr.Group(elem_classes=["studio-card"]):
+                gr.HTML("<div class='card-title'>🎬 Step 5: Processed Results</div>")
+                with gr.Row():
+                    out_image = gr.Image(label="Swapped Output Image", visible=True)
+                    out_video = gr.Video(label="Swapped Output Video", visible=True)
 
     # -------------------------------------------------------------
-    # Model & Processor Controls
-    # -------------------------------------------------------------
-    with gr.Tab("⚙️ Swapper & Model Options"):
-        with gr.Row():
-            swapper_model = gr.Dropdown(
-                choices=[
-                    "inswapper_128_fp16",
-                    "inswapper_128",
-                    "hyperswap_1a_256",
-                    "hyperswap_1b_256",
-                    "hyperswap_1c_256",
-                    "simswap_256",
-                    "simswap_512_unofficial"
-                ],
-                value="inswapper_128_fp16",
-                label="Face Swapper Model"
-            )
-            pixel_boost = gr.Dropdown(
-                choices=["none", "128x128", "256x256", "384x384", "512x512", "768x768", "1024x1024"],
-                value="none",
-                label="Pixel Boost (Super Resolution Tiling)"
-            )
-            swapper_weight = gr.Slider(
-                minimum=0.0,
-                maximum=1.0,
-                value=0.5,
-                step=0.05,
-                label="Swapper Identity Balance (0=Target, 1=Source)"
-            )
-
-    # -------------------------------------------------------------
-    # Detection & Landmarking Controls
-    # -------------------------------------------------------------
-    with gr.Tab("🎯 Detection & Landmarker"):
-        with gr.Row():
-            detector_model = gr.Dropdown(
-                choices=["yolo_face", "scrfd", "retinaface", "yunet"],
-                value="yolo_face",
-                label="Face Detector Model"
-            )
-            detector_size = gr.Dropdown(
-                choices=["320x320", "480x480", "512x512", "640x640", "768x768", "960x960", "1024x1024"],
-                value="640x640",
-                label="Detector Input Size"
-            )
-            detector_score = gr.Slider(
-                minimum=0.1,
-                maximum=1.0,
-                value=0.5,
-                step=0.05,
-                label="Detector Score Threshold"
-            )
-
-        with gr.Row():
-            detector_angles = gr.CheckboxGroup(
-                choices=[0, 90, 180, 270],
-                value=[0],
-                label="Detector Angles (Rotational Search)"
-            )
-            landmarker_model = gr.Dropdown(
-                choices=["2dfan4", "peppa_wutz"],
-                value="2dfan4",
-                label="Face Landmarker Model"
-            )
-            landmarker_score = gr.Slider(
-                minimum=0.0,
-                maximum=1.0,
-                value=0.0,
-                step=0.05,
-                label="Landmarker Score Threshold (0.0 = Ultra-Fast 5-pt detector)"
-            )
-
-        # Margin expansion
-        with gr.Accordion("📐 Face Margins / Detector Expansion (%)", open=True):
-            with gr.Row():
-                margin_top = gr.Slider(0, 100, value=0, step=1, label="Face Margin Top (%)")
-                margin_right = gr.Slider(0, 100, value=0, step=1, label="Face Margin Right (%)")
-                margin_bottom = gr.Slider(0, 100, value=0, step=1, label="Face Margin Bottom (%)")
-                margin_left = gr.Slider(0, 100, value=0, step=1, label="Face Margin Left (%)")
-
-    # -------------------------------------------------------------
-    # Face Selector & Sorting Controls
-    # -------------------------------------------------------------
-    with gr.Tab("🎯 Face Selector & Sorting"):
-        with gr.Row():
-            face_selector_mode = gr.Dropdown(
-                choices=["many", "reference"],
-                value="many",
-                label="Face Selector Mode (many=All faces, reference=Match reference face)"
-            )
-            face_selector_order = gr.Dropdown(
-                choices=[
-                    "large-small",
-                    "small-large",
-                    "left-right",
-                    "right-left",
-                    "top-bottom",
-                    "bottom-top",
-                    "best-worst",
-                    "worst-best"
-                ],
-                value="large-small",
-                label="Face Sorting Order"
-            )
-            reference_face_distance = gr.Slider(
-                minimum=0.0,
-                maximum=1.0,
-                step=0.05,
-                value=0.3,
-                label="Reference Face Distance Threshold (0.3 = Standard FaceFusion default)",
-                visible=False
-            )
-
-        # Internal state for selected target face position index (updated by clicking gallery faces)
-        face_selector_position = gr.State(value=0)
-
-        with gr.Group(visible=False) as reference_container:
-            gr.Markdown("### 👤 Target / Preview Frame Detected Faces (Click any face to select as Reference Face)")
-            ref_gallery = gr.Gallery(
-                label="Detected Faces in Target / Preview Frame",
-                columns=6,
-                height=200,
-                allow_preview=False,
-                object_fit="cover"
-            )
-            ref_status = gr.Markdown("Load a target image/video or adjust the preview frame slider to detect faces.")
-
-    # -------------------------------------------------------------
-    # Masking & Blending Controls
-    # -------------------------------------------------------------
-    with gr.Tab("🎭 Face Masking & Occlusion"):
-        with gr.Row():
-            mask_types = gr.CheckboxGroup(
-                choices=["box", "occlusion", "region", "area"],
-                value=["box"],
-                label="Active Mask Types"
-            )
-            occluder_model = gr.Dropdown(
-                choices=["xseg_1", "xseg_2", "xseg_3"],
-                value="xseg_1",
-                label="Occlusion Segmentation Model"
-            )
-
-            mask_blur = gr.Slider(
-                minimum=0.0,
-                maximum=1.0,
-                value=0.3,
-                step=0.05,
-                label="Mask Feather / Box Blur"
-            )
-
-        with gr.Row():
-            mask_areas = gr.CheckboxGroup(
-                choices=["upper-face", "lower-face", "mouth", "eyes", "nose"],
-                value=["upper-face", "lower-face", "mouth", "eyes", "nose"],
-                label="Landmark Mask Areas (Active when 'area' mask is selected)"
-            )
-            mask_regions = gr.CheckboxGroup(
-                choices=["skin", "left-eyebrow", "right-eyebrow", "left-eye", "right-eye", "nose", "mouth", "upper-lip", "lower-lip"],
-                value=["skin", "left-eyebrow", "right-eyebrow", "left-eye", "right-eye", "nose", "mouth", "upper-lip", "lower-lip"],
-                label="Semantic Mask Regions (Active when 'region' mask is selected)"
-            )
-
-        with gr.Accordion("✂️ Face Mask Padding (% Cut)", open=False):
-            with gr.Row():
-                mask_padding_top = gr.Slider(0, 100, value=0, step=1, label="Mask Padding Top (%)")
-                mask_padding_right = gr.Slider(0, 100, value=0, step=1, label="Mask Padding Right (%)")
-                mask_padding_bottom = gr.Slider(0, 100, value=0, step=1, label="Mask Padding Bottom (%)")
-                mask_padding_left = gr.Slider(0, 100, value=0, step=1, label="Mask Padding Left (%)")
-
-    # -------------------------------------------------------------
-    # Video Trimming & Output Controls
-    # -------------------------------------------------------------
-    with gr.Tab("✂️ Video Trimming & Encoding"):
-        trim_mode = gr.Radio(["Seconds", "Frames"], value="Seconds", label="Trim Mode")
-        with gr.Row():
-            start_sec = gr.Number(label="Start Time (seconds)", value=0.0)
-            end_sec = gr.Number(label="End Time (seconds, 0=Full)", value=0.0)
-        with gr.Row():
-            start_frame = gr.Number(label="Start Frame", value=0)
-            end_frame = gr.Number(label="End Frame (0=Full)", value=0)
-        with gr.Row():
-            frame_quality = gr.Slider(0, 100, value=80, step=1, label="Output Frame Quality (0-100)")
-            fps_override = gr.Slider(0, 120, value=0, step=1, label="FPS Override (0=Same as Target)")
-
-    # -------------------------------------------------------------
-    # Interactive Frame Preview Section
-    # -------------------------------------------------------------
-    with gr.Accordion("🎞️ Interactive Frame Preview", open=True, visible=False) as preview_box:
-        with gr.Row():
-            frame_slider = gr.Slider(minimum=0, maximum=1, step=1, value=0, label="Preview Frame Index")
-            preview_btn = gr.Button("👁️ Generate Frame Preview", variant="secondary")
-        preview_output = gr.Image(label="Live Preview Result", type="numpy")
-
-    # Run Button & Outputs
-    run_btn = gr.Button("🚀 RUN MONOFACE BATCH SWAP", variant="primary", size="lg")
-    status_box = gr.Textbox(label="Status & Execution Log", interactive=False)
-
-    with gr.Row():
-        out_image = gr.Image(label="Swapped Output Image")
-        out_video = gr.Video(label="Swapped Output Video")
-
-    # -------------------------------------------------------------
-    # Events & Callbacks
+    # Dynamic Events & Callbacks
     # -------------------------------------------------------------
     tgt_file.change(
         fn=update_ui_for_target,
@@ -1028,7 +1423,7 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         outputs=[reference_face_distance, reference_container, ref_gallery, ref_status]
     )
 
-    # Automatically refresh detected target faces gallery on changes
+    # Automatically refresh detected target faces gallery on parameter updates
     for comp in [tgt_file, face_selector_order]:
         comp.change(
             fn=update_reference_face_gallery,
@@ -1085,7 +1480,7 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         outputs=[preview_output]
     )
 
-    run_btn.click(
+    run_event = run_btn.click(
         fn=run_batch_swap,
         inputs=[
             src_files,
@@ -1102,8 +1497,14 @@ with gr.Blocks(title="MonoFace Pro") as demo:
         outputs=[out_image, out_video, status_box]
     )
 
+    cancel_btn.click(
+        fn=None,
+        inputs=None,
+        outputs=None,
+        cancels=[run_event]
+    )
+
 if __name__ == "__main__":
-    import onnxruntime
     providers = onnxruntime.get_available_providers()
     print(f"🔥 Active ONNX Runtime Execution Providers: {providers}")
     if "CUDAExecutionProvider" not in providers:
@@ -1117,3 +1518,4 @@ if __name__ == "__main__":
         print(f"⚠️ Note: Face analyser models will load on first inference ({e})")
 
     demo.launch(share=True, inbrowser=True, theme=theme, css=custom_css)
+
