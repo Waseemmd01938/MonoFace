@@ -1523,6 +1523,11 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"⚠️ Note: Face analyser models will load on first inference ({e})")
 
+    try:
+        gr.close_all()
+    except Exception:
+        pass
+
     demo.launch(
         share=args.share,
         inbrowser=args.inbrowser,
