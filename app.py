@@ -1506,8 +1506,8 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="MonoFace Studio")
-    parser.add_argument("--share", type=str, default="False", help="Share the app")
-    parser.add_argument("--inbrowser", type=str, default="True", help="Open in browser")
+    parser.add_argument("--share", type=bool, default=True, help="Share the app")
+    parser.add_argument("--inbrowser", type=bool, default=True, help="Open in browser")
     # parser.add_argument("--server-name", type=str, default="[IP_ADDRESS]", help="Server name")
     args = parser.parse_args()
     
