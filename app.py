@@ -1073,7 +1073,7 @@ theme = gr.themes.Soft(
     button_primary_text_color="#ffffff"
 )
 
-with gr.Blocks(title="MonoFace Studio Pro", theme=theme, css=custom_css) as demo:
+with gr.Blocks(title="MonoFace Studio Pro") as demo:
     # -------------------------------------------------------------
     # Studio Header
     # -------------------------------------------------------------
@@ -1515,5 +1515,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"⚠️ Note: Face analyser models will load on first inference ({e})")
 
-    demo.launch(share=True, inbrowser=True, theme=theme, css=custom_css)
+    demo.launch(share=True, inbrowser=True, server_name="0.0.0.0", theme=theme, css=custom_css)
 
