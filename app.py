@@ -1068,11 +1068,9 @@ theme = gr.themes.Soft(
     block_background_fill_dark="rgba(17, 24, 39, 0.75)",
     block_border_color="rgba(99, 102, 241, 0.2)",
     block_border_color_dark="rgba(99, 102, 241, 0.2)",
-    block_radius="14px",
     button_primary_background_fill="linear-gradient(135deg, #6366f1, #8b5cf6)",
     button_primary_background_fill_dark="linear-gradient(135deg, #6366f1, #8b5cf6)",
-    button_primary_text_color="#ffffff",
-    button_primary_radius="12px"
+    button_primary_text_color="#ffffff"
 )
 
 with gr.Blocks(title="MonoFace Studio Pro", theme=theme, css=custom_css) as demo:
