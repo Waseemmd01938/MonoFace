@@ -148,6 +148,40 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     # -------------------------------------------------------------
     # 5. Face Maskers & Occlusion
     # -------------------------------------------------------------
+    # 5. Face Maskers & Occluders
+    # -------------------------------------------------------------
+    'xseg_1': {
+        'category': 'face_occluder',
+        'file': 'xseg_1.onnx',
+        'hash_file': 'xseg_1.hash',
+        'tag': 'models-3.1.0',
+        'size': (256, 256),
+        'vendor': 'DeepFaceLab'
+    },
+    'xseg_2': {
+        'category': 'face_occluder',
+        'file': 'xseg_2.onnx',
+        'hash_file': 'xseg_2.hash',
+        'tag': 'models-3.1.0',
+        'size': (256, 256),
+        'vendor': 'DeepFaceLab'
+    },
+    'xseg_3': {
+        'category': 'face_occluder',
+        'file': 'xseg_3.onnx',
+        'hash_file': 'xseg_3.hash',
+        'tag': 'models-3.2.0',
+        'size': (256, 256),
+        'vendor': 'DeepFaceLab'
+    },
+    'face_occluder': {
+        'category': 'face_occluder',
+        'file': 'xseg_1.onnx',
+        'hash_file': 'xseg_1.hash',
+        'tag': 'models-3.1.0',
+        'size': (256, 256),
+        'vendor': 'DeepFaceLab'
+    },
     'face_parser': {
         'category': 'face_masker',
         'file': 'face_parser.onnx',
@@ -155,6 +189,14 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         'tag': 'models-3.0.0',
         'size': (512, 512),
         'vendor': 'FaceFusion'
+    },
+    'bisenet_resnet_18': {
+        'category': 'face_masker',
+        'file': 'bisenet_resnet_18.onnx',
+        'hash_file': 'bisenet_resnet_18.hash',
+        'tag': 'models-3.1.0',
+        'size': (512, 512),
+        'vendor': 'yakhyo'
     },
     'bisenet_resnet_34': {
         'category': 'face_masker',

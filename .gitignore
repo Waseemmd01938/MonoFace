@@ -26,6 +26,7 @@ Models/
 *.swo
 .DS_Store
 Thumbs.db
-
+.gradio
+outputs
 # Logs & temp
 *.log

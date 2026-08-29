@@ -126,20 +126,30 @@ class FaceMasker:
         """
         Creates an occlusion mask segmenting hands, glasses, hair, microphones, or objects in front of the face.
         """
-        session = self._get_occluder_session()
-        cfg = OCCLUSION_MODELS.get(self.occluder_model, OCCLUSION_MODELS['face_occluder'])
-        target_size = cfg['size']
-
+        model_names = ['xseg_1', 'xseg_2', 'xseg_3'] if self.occluder_model == 'many' else [self.occluder_model]
         h, w = crop_vision_frame.shape[:2]
-        prep = cv2.resize(crop_vision_frame, target_size)
-        prep = np.expand_dims(prep, axis=0).astype(np.float32) / 255.0
+        temp_masks = []
 
-        raw_mask = session.run(None, {'input': prep})[0][0]
-        raw_mask = raw_mask.transpose(0, 1).clip(0, 1).astype(np.float32) if len(raw_mask.shape) == 2 else raw_mask[0].clip(0, 1).astype(np.float32)
-        resized_mask = cv2.resize(raw_mask, (w, h))
+        for model_name in model_names:
+            model_path = download_model(model_name)
+            session = get_inference_session(model_path, providers=self.providers)
+            cfg = OCCLUSION_MODELS.get(model_name, OCCLUSION_MODELS['xseg_1'])
+            target_size = cfg['size']
 
-        feathered_mask = (cv2.GaussianBlur(resized_mask.clip(0, 1), (0, 0), 5).clip(0.5, 1) - 0.5) * 2
-        return feathered_mask.clip(0, 1)
+            prep = cv2.resize(crop_vision_frame, target_size)
+            prep = np.expand_dims(prep, axis=0).astype(np.float32) / 255.0
+
+            raw_out = session.run(None, {'input': prep})[0][0]
+            squeezed = np.squeeze(raw_out).clip(0, 1).astype(np.float32)
+            resized = cv2.resize(squeezed, (w, h))
+            temp_masks.append(resized)
+
+        if not temp_masks:
+            return np.ones((h, w), dtype=np.float32)
+
+        occlusion_mask = np.minimum.reduce(temp_masks)
+        feathered_mask = (cv2.GaussianBlur(occlusion_mask.clip(0, 1), (0, 0), 5).clip(0.5, 1) - 0.5) * 2
+        return feathered_mask.clip(0, 1).astype(np.float32)
 
     def create_area_mask(
         self,

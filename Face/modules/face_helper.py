@@ -73,37 +73,21 @@ DEFAULT_MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirnam
 
 
 def ensure_model_exists(file_name: str, download_tag: str = 'models-3.0.0', models_dir: Optional[str] = None) -> str:
-    """Ensures that the requested ONNX model is available locally, downloading if necessary."""
-    target_dir = models_dir or DEFAULT_MODELS_DIR
-    os.makedirs(target_dir, exist_ok=True)
-    model_path = os.path.join(target_dir, file_name)
-
-    if os.path.isfile(model_path) and os.path.getsize(model_path) > 1024:
-        return model_path
-
-    urls = [
-        f"https://github.com/facefusion/facefusion-assets/releases/download/{download_tag}/{file_name}",
-        f"https://huggingface.co/facefusion/facefusion-assets/resolve/main/{download_tag}/{file_name}"
-    ]
-
-    for url in urls:
-        try:
-            print(f"Downloading model {file_name}")
-            urllib.request.urlretrieve(url, model_path)
-            if os.path.isfile(model_path) and os.path.getsize(model_path) > 1024:
-                print(f"Successfully downloaded {file_name}")
-                return model_path
-        except Exception as e:
-            print(f"Failed to download {file_name}: {e}")
-
-    if not (os.path.isfile(model_path) and os.path.getsize(model_path) > 1024):
-        # Also check relative facefusion repository if available locally
+    """Ensures that the requested ONNX model is available locally, downloading if necessary with progress tracking."""
+    from downloads import download_model
+    try:
+        return download_model(file_name, models_dir=models_dir, show_progress=True)
+    except Exception:
+        # Fallback to direct download
+        target_dir = models_dir or DEFAULT_MODELS_DIR
+        os.makedirs(target_dir, exist_ok=True)
+        model_path = os.path.join(target_dir, file_name)
+        if os.path.isfile(model_path) and os.path.getsize(model_path) > 1024:
+            return model_path
         possible_local = os.path.join("D:\\waseem\\ML\\facefusion\\.assets\\models", file_name)
         if os.path.isfile(possible_local):
             return possible_local
         raise FileNotFoundError(f"Could not locate or download model: {file_name}")
-
-    return model_path
 
 
 def estimate_matrix_by_face_landmark_5(face_landmark_5: FaceLandmark5, warp_template: str, crop_size: Tuple[int, int]) -> Matrix:
