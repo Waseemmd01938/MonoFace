@@ -793,7 +793,7 @@ with gr.Blocks(title="MonoFace Pro") as demo:
     with gr.Tab("🎯 Detection & Landmarker"):
         with gr.Row():
             detector_model = gr.Dropdown(
-                choices=["yolo_face", "scrfd", "retinaface", "yunet"],
+                choices=["yolo_face", "scrfd", "retinaface", "yunet", "mediapipe"],
                 value="yolo_face",
                 label="Face Detector Model"
             )
@@ -817,7 +817,7 @@ with gr.Blocks(title="MonoFace Pro") as demo:
                 label="Detector Angles (Rotational Search)"
             )
             landmarker_model = gr.Dropdown(
-                choices=["2dfan4", "peppa_wutz"],
+                choices=["2dfan4", "peppa_wutz", "mediapipe"],
                 value="2dfan4",
                 label="Face Landmarker Model"
             )

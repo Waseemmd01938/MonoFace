@@ -23,6 +23,26 @@ from Face.modules.face_helper import (
 )
 from Face.modules.model_store import get_inference_session, get_default_providers
 
+# Canonical MediaPipe 468-mesh to 68-point iBUG/Dlib landmark indices mapping
+MEDIAPIPE_TO_68_INDICES = [
+    # Jawline (0-16)
+    162, 234, 93, 58, 172, 136, 149, 148, 152, 377, 378, 365, 397, 288, 323, 454, 389,
+    # Right Eyebrow (17-21)
+    70, 63, 105, 66, 107,
+    # Left Eyebrow (22-26)
+    336, 296, 334, 293, 300,
+    # Nose Bridge & Tip (27-35)
+    168, 197, 5, 4, 75, 97, 2, 326, 305,
+    # Right Eye (36-41)
+    33, 160, 158, 133, 153, 144,
+    # Left Eye (42-47)
+    362, 385, 387, 263, 373, 380,
+    # Outer Mouth (48-59)
+    61, 39, 37, 0, 267, 269, 291, 405, 314, 17, 84, 181,
+    # Inner Mouth (60-67)
+    78, 81, 13, 311, 308, 402, 14, 178
+]
+
 LANDMARK_MODELS = {
 
     '2dfan4': {
@@ -38,6 +58,11 @@ LANDMARK_MODELS = {
     'fan_68_5': {
         'file': 'fan_68_5.onnx',
         'tag': 'models-3.0.0'
+    },
+    'mediapipe': {
+        'file': None,
+        'tag': None,
+        'size': None
     }
 }
 
@@ -54,10 +79,15 @@ class FaceLandmarker:
             raise ValueError(f"Unsupported landmarker model: {model_name}. Supported: {list(LANDMARK_MODELS.keys())}")
 
         self.providers = providers if providers is not None else get_default_providers()
+        self._mp_mesh = None
 
-        cfg = LANDMARK_MODELS[self.model_name]
-        self.model_file = model_path or ensure_model_exists(cfg['file'], cfg['tag'])
-        self.session = get_inference_session(self.model_file, providers=self.providers)
+        if self.model_name == 'mediapipe':
+            self.model_file = None
+            self.session = None
+        else:
+            cfg = LANDMARK_MODELS[self.model_name]
+            self.model_file = model_path or ensure_model_exists(cfg['file'], cfg['tag'])
+            self.session = get_inference_session(self.model_file, providers=self.providers)
 
         # Preload fan_68_5 session upfront for instant landmark conversion
         fan_cfg = LANDMARK_MODELS['fan_68_5']
@@ -66,8 +96,22 @@ class FaceLandmarker:
 
     def preload(self) -> None:
         """Warms up landmark and fan_68_5 sessions."""
-        _ = self.session.get_inputs()
-        _ = self._fan_68_5_session.get_inputs()
+        if self.model_name == 'mediapipe':
+            try:
+                import mediapipe as mp
+                if self._mp_mesh is None:
+                    self._mp_mesh = mp.solutions.face_mesh.FaceMesh(
+                        static_image_mode=True,
+                        max_num_faces=1,
+                        refine_landmarks=True,
+                        min_detection_confidence=0.5
+                    )
+            except Exception:
+                pass
+        elif self.session is not None:
+            _ = self.session.get_inputs()
+        if self._fan_68_5_session is not None:
+            _ = self._fan_68_5_session.get_inputs()
 
 
     def detect_landmarks(
@@ -85,6 +129,8 @@ class FaceLandmarker:
             return self._detect_with_2dfan4(vision_frame, bounding_box, face_angle)
         elif self.model_name == 'peppa_wutz':
             return self._detect_with_peppa_wutz(vision_frame, bounding_box, face_angle)
+        elif self.model_name == 'mediapipe':
+            return self._detect_with_mediapipe(vision_frame, bounding_box, face_angle)
         elif self.model_name == 'fan_68_5':
             # Needs 5 landmarks first
             raise ValueError("fan_68_5 converts from 5-point landmarks. Use estimate_landmark_68_from_5(face_landmark_5)")
@@ -154,6 +200,58 @@ class FaceLandmarker:
         score_68 = pts_with_conf[:, 2].mean()
         score_normalized = float(np.interp(score_68, [0, 0.95], [0, 1]))
         return face_landmark_68, score_normalized
+
+    def _detect_with_mediapipe(
+        self,
+        temp_vision_frame: VisionFrame,
+        bounding_box: BoundingBox,
+        face_angle: Angle
+    ) -> Tuple[FaceLandmark68, Score]:
+        try:
+            import mediapipe as mp
+        except ImportError:
+            raise ImportError("MediaPipe is required for 'mediapipe' landmarker. Please install via: pip install mediapipe")
+
+        if self._mp_mesh is None:
+            self._mp_mesh = mp.solutions.face_mesh.FaceMesh(
+                static_image_mode=True,
+                max_num_faces=1,
+                refine_landmarks=True,
+                min_detection_confidence=0.5
+            )
+
+        h, w = temp_vision_frame.shape[:2]
+        x1, y1, x2, y2 = bounding_box
+        bw, bh = max(1.0, x2 - x1), max(1.0, y2 - y1)
+        pad_x = bw * 0.25
+        pad_y = bh * 0.25
+        crop_x1 = max(0, int(x1 - pad_x))
+        crop_y1 = max(0, int(y1 - pad_y))
+        crop_x2 = min(w, int(x2 + pad_x))
+        crop_y2 = min(h, int(y2 + pad_y))
+
+        crop = temp_vision_frame[crop_y1:crop_y2, crop_x1:crop_x2]
+        if crop.size == 0:
+            return np.zeros((68, 2), dtype=np.float32), 0.0
+
+        crop_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+        ch, cw = crop.shape[:2]
+        results = self._mp_mesh.process(crop_rgb)
+
+        if not results.multi_face_landmarks:
+            # Fallback to full frame if crop detection misses
+            full_rgb = cv2.cvtColor(temp_vision_frame, cv2.COLOR_BGR2RGB)
+            results = self._mp_mesh.process(full_rgb)
+            if not results.multi_face_landmarks:
+                return np.zeros((68, 2), dtype=np.float32), 0.0
+            raw_lms = results.multi_face_landmarks[0].landmark
+            pts_468 = np.array([[p.x * w, p.y * h] for p in raw_lms], dtype=np.float32)
+        else:
+            raw_lms = results.multi_face_landmarks[0].landmark
+            pts_468 = np.array([[p.x * cw + crop_x1, p.y * ch + crop_y1] for p in raw_lms], dtype=np.float32)
+
+        landmark_68 = pts_468[MEDIAPIPE_TO_68_INDICES]
+        return landmark_68.astype(np.float32), 0.99
 
     def estimate_landmark_68_from_5(self, face_landmark_5: FaceLandmark5) -> FaceLandmark68:
         """Estimates full 68-point landmarks given 5-point face landmarks using preloaded fan_68_5 model."""

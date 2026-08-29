@@ -48,6 +48,12 @@ MODEL_CONFIGS = {
         'tag': 'models-3.4.0',
         'input_size': (640, 640),
         'normalize_range': [0, 255]
+    },
+    'mediapipe': {
+        'file': None,
+        'tag': None,
+        'input_size': (640, 640),
+        'normalize_range': [0, 1]
     }
 }
 
@@ -75,14 +81,30 @@ class FaceDetector:
         self.margin = margin
 
         self.providers = providers if providers is not None else get_default_providers()
+        self._mp_detector = None
 
-        cfg = MODEL_CONFIGS[self.model_name]
-        self.model_file = model_path or ensure_model_exists(cfg['file'], cfg['tag'])
-        self.session = get_inference_session(self.model_file, providers=self.providers)
+        if self.model_name == 'mediapipe':
+            self.model_file = None
+            self.session = None
+        else:
+            cfg = MODEL_CONFIGS[self.model_name]
+            self.model_file = model_path or ensure_model_exists(cfg['file'], cfg['tag'])
+            self.session = get_inference_session(self.model_file, providers=self.providers)
 
     def preload(self) -> None:
         """Warms up the detector session."""
-        _ = self.session.get_inputs()
+        if self.model_name == 'mediapipe':
+            try:
+                import mediapipe as mp
+                if self._mp_detector is None:
+                    self._mp_detector = mp.solutions.face_detection.FaceDetection(
+                        min_detection_confidence=self.score_threshold,
+                        model_selection=0
+                    )
+            except Exception:
+                pass
+        elif self.session is not None:
+            _ = self.session.get_inputs()
 
 
     def detect(self, vision_frame: VisionFrame) -> List[Dict[str, Any]]:
@@ -154,6 +176,8 @@ class FaceDetector:
             bboxes, scores, landmarks = self._detect_with_retinaface(padded_frame)
         elif self.model_name == 'yunet':
             bboxes, scores, landmarks = self._detect_with_yunet(padded_frame)
+        elif self.model_name == 'mediapipe':
+            bboxes, scores, landmarks = self._detect_with_mediapipe(padded_frame)
         else:
             bboxes, scores, landmarks = [], [], []
 
@@ -338,6 +362,64 @@ class FaceDetector:
                     scores.append(float(scores_raw[i]))
                     lm_5 = (lms_raw[i].reshape(5, 2) * stride + anchors[i]) * [scale_x, scale_y]
                     landmarks_5.append(lm_5)
+
+        return bounding_boxes, scores, landmarks_5
+
+    def _detect_with_mediapipe(self, vision_frame: VisionFrame) -> Tuple[List[BoundingBox], List[Score], List[FaceLandmark5]]:
+        try:
+            import mediapipe as mp
+        except ImportError:
+            raise ImportError("MediaPipe is required for 'mediapipe' detector. Please install via: pip install mediapipe")
+
+        h, w = vision_frame.shape[:2]
+        rgb_frame = cv2.cvtColor(vision_frame, cv2.COLOR_BGR2RGB)
+
+        if self._mp_detector is None:
+            self._mp_detector = mp.solutions.face_detection.FaceDetection(
+                min_detection_confidence=self.score_threshold,
+                model_selection=0
+            )
+
+        results = self._mp_detector.process(rgb_frame)
+        if not results.detections:
+            return [], [], []
+
+        bounding_boxes: List[BoundingBox] = []
+        scores: List[Score] = []
+        landmarks_5: List[FaceLandmark5] = []
+
+        for detection in results.detections:
+            score = float(detection.score[0]) if detection.score else 0.0
+            if score < self.score_threshold:
+                continue
+
+            loc = detection.location_data
+            box = loc.relative_bounding_box
+            x1 = max(0.0, float(box.xmin * w))
+            y1 = max(0.0, float(box.ymin * h))
+            x2 = min(float(w), float((box.xmin + box.width) * w))
+            y2 = min(float(h), float((box.ymin + box.height) * h))
+            bounding_boxes.append(np.array([x1, y1, x2, y2], dtype=np.float32))
+            scores.append(score)
+
+            # MediaPipe keypoints:
+            # 0: Right eye, 1: Left eye, 2: Nose tip, 3: Mouth center, 4: Right ear tragion, 5: Left ear tragion
+            kps = loc.relative_keypoints
+            re = np.array([kps[0].x * w, kps[0].y * h], dtype=np.float32)
+            le = np.array([kps[1].x * w, kps[1].y * h], dtype=np.float32)
+            nose = np.array([kps[2].x * w, kps[2].y * h], dtype=np.float32)
+            mouth = np.array([kps[3].x * w, kps[3].y * h], dtype=np.float32)
+
+            # Estimate left and right mouth corners from mouth center and eye span
+            eye_vec = (re - le) * 0.25
+            lm_5 = np.array([
+                le,                           # Left eye
+                re,                           # Right eye
+                nose,                         # Nose tip
+                mouth - eye_vec,              # Left mouth corner
+                mouth + eye_vec               # Right mouth corner
+            ], dtype=np.float32)
+            landmarks_5.append(lm_5)
 
         return bounding_boxes, scores, landmarks_5
 
