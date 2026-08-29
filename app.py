@@ -1523,5 +1523,12 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"⚠️ Note: Face analyser models will load on first inference ({e})")
 
-    demo.launch(share=args.share, inbrowser=args.inbrowser, theme=theme, css=custom_css)
+    demo.launch(
+        share=args.share,
+        inbrowser=args.inbrowser,
+        server_name="0.0.0.0",
+        server_port=7860,
+        theme=theme,
+        css=custom_css
+    )
 
