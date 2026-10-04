@@ -35,6 +35,11 @@ LANDMARK_MODELS = {
         'tag': 'models-3.0.0',
         'size': (256, 256)
     },
+    'hrffa': {
+        'file': 'hrffa.onnx',
+        'tag': 'models-3.9.0',
+        'size': (256, 256)
+    },
     'fan_68_5': {
         'file': 'fan_68_5.onnx',
         'tag': 'models-3.0.0'
@@ -85,6 +90,8 @@ class FaceLandmarker:
             return self._detect_with_2dfan4(vision_frame, bounding_box, face_angle)
         elif self.model_name == 'peppa_wutz':
             return self._detect_with_peppa_wutz(vision_frame, bounding_box, face_angle)
+        elif self.model_name == 'hrffa':
+            return self._detect_with_hrffa(vision_frame, bounding_box)
         elif self.model_name == 'fan_68_5':
             # Needs 5 landmarks first
             raise ValueError("fan_68_5 converts from 5-point landmarks. Use estimate_landmark_68_from_5(face_landmark_5)")
@@ -154,6 +161,29 @@ class FaceLandmarker:
         score_68 = pts_with_conf[:, 2].mean()
         score_normalized = float(np.interp(score_68, [0, 0.95], [0, 1]))
         return face_landmark_68, score_normalized
+
+    def _detect_with_hrffa(
+        self,
+        temp_vision_frame: VisionFrame,
+        bounding_box: BoundingBox
+    ) -> Tuple[FaceLandmark68, Score]:
+        model_size = LANDMARK_MODELS['hrffa']['size']
+        box_size = np.subtract(bounding_box[2:], bounding_box[:2]).max()
+        scale = float(model_size[0]) / (max(float(box_size), 1.0) * 1.7)
+        box_center = np.add(bounding_box[2:], bounding_box[:2])
+        translation = (model_size[0] - box_center * scale) * 0.5
+
+        crop_vision_frame, affine_matrix = warp_face_by_translation(temp_vision_frame, translation, scale, model_size)
+        crop_vision_frame = crop_vision_frame[:, :, ::-1].transpose(2, 0, 1).astype(np.float32) / 255.0
+        crop_vision_frame = (crop_vision_frame - 0.5) / 0.5
+        crop_vision_frame = np.expand_dims(crop_vision_frame, axis=0)
+
+        output = self.session.run(None, {'input': crop_vision_frame})[0]
+        face_landmark_68 = output.reshape(-1, 2) * float(model_size[0])
+        face_landmark_68 = transform_points(face_landmark_68, cv2.invertAffineTransform(affine_matrix))
+        face_landmark_score_68 = 1.0
+
+        return face_landmark_68, face_landmark_score_68
 
     def estimate_landmark_68_from_5(self, face_landmark_5: FaceLandmark5) -> FaceLandmark68:
         """Estimates full 68-point landmarks given 5-point face landmarks using preloaded fan_68_5 model."""

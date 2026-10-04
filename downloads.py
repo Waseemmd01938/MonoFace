@@ -66,6 +66,14 @@ def validate_file_hash(file_path: str, hash_value_or_path: str) -> bool:
         except Exception:
             return False
 
+    if len(expected_hash) == 8:
+        import zlib
+        crc = 0
+        with open(file_path, 'rb') as f:
+            while chunk := f.read(65536):
+                crc = zlib.crc32(chunk, crc)
+        return format(crc, '08x').lower() == expected_hash
+
     algo = 'sha256' if len(expected_hash) == 64 else 'sha1' if len(expected_hash) == 40 else 'md5'
     actual_hash = calculate_file_hash(file_path, algorithm=algo)
     return actual_hash == expected_hash

@@ -98,6 +98,14 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         'size': (256, 256),
         'vendor': 'Unknown'
     },
+    'hrffa': {
+        'category': 'face_landmarker',
+        'file': 'hrffa.onnx',
+        'hash_file': 'hrffa.hash',
+        'tag': 'models-3.9.0',
+        'size': (256, 256),
+        'vendor': 'PINTO0309'
+    },
     'fan_68_5': {
         'category': 'face_landmarker',
         'file': 'fan_68_5.onnx',
@@ -226,6 +234,15 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     # -------------------------------------------------------------
     # 6. Face Swappers
     # -------------------------------------------------------------
+    'alphaface_256': {
+        'category': 'face_swapper',
+        'file': 'alphaface_256.onnx',
+        'hash_file': 'alphaface_256.hash',
+        'tag': 'models-3.9.0',
+        'template': 'arcface_128',
+        'size': (256, 256),
+        'vendor': 'AlphaFace'
+    },
     'inswapper_128': {
         'category': 'face_swapper',
         'file': 'inswapper_128.onnx',

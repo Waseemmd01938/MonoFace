@@ -20,6 +20,14 @@ _INITIALIZER_CACHE: Dict[str, np.ndarray] = {}
 
 SWAPPER_CONFIGS: Dict[str, Dict[str, Any]] = {
 
+    'alphaface_256': {
+        'file': 'alphaface_256.onnx',
+        'type': 'alphaface',
+        'template': 'arcface_128',
+        'size': (256, 256),
+        'mean': [0.0, 0.0, 0.0],
+        'std': [1.0, 1.0, 1.0]
+    },
     'inswapper_128': {
         'file': 'inswapper_128.onnx',
         'type': 'inswapper',
@@ -151,6 +159,10 @@ class FaceSwapper:
         """Transforms source face embedding according to swapper model requirements."""
         model_type = self.cfg['type']
 
+        if model_type == 'alphaface':
+            emb = source_face.embedding if source_face.embedding is not None else source_face.embedding_norm
+            return emb.reshape(1, -1)
+
         if model_type == 'hyperswap':
             return source_face.embedding_norm.reshape(1, -1)
 
@@ -181,6 +193,8 @@ class FaceSwapper:
         source_emb = source_embedding.reshape(1, -1)
 
         balanced = source_emb * (1.0 - weight_factor) + target_norm * weight_factor
+        if self.cfg['type'] == 'alphaface':
+            return balanced
         return balanced / max(np.linalg.norm(balanced), 1e-6)
 
     def _forward_single_crop(self, prep_crop: np.ndarray, source_embedding: np.ndarray) -> np.ndarray:

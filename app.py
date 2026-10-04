@@ -985,6 +985,7 @@ with gr.Blocks(title="MonoFace Studio Pro", fill_width=True) as demo:
                 swapper_model = gr.Dropdown(
                     label="FACE SWAPPER MODEL",
                     choices=[
+                        "alphaface_256",
                         "hyperswap_1a_256",
                         "inswapper_128_fp16",
                         "inswapper_128",
@@ -1241,7 +1242,7 @@ with gr.Blocks(title="MonoFace Studio Pro", fill_width=True) as demo:
             with gr.Blocks():
                 landmarker_model = gr.Dropdown(
                     label="FACE LANDMARKER MODEL",
-                    choices=["2dfan4", "peppa_wutz"],
+                    choices=["2dfan4", "peppa_wutz", "hrffa"],
                     value="2dfan4"
                 )
                 landmarker_score = gr.Slider(
