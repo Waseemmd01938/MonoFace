@@ -963,6 +963,17 @@ def get_facefusion_css() -> str:
     """
 
 
+def get_facefusion_head() -> str:
+    return """
+    <script>
+    // Keep Gradio public tunnel active with periodic ping
+    setInterval(function() {
+        fetch(window.location.href, { method: 'HEAD' }).catch(function() {});
+    }, 25000);
+    </script>
+    """
+
+
 with gr.Blocks(title="MonoFace Studio Pro", fill_width=True) as demo:
 
     # 3-Column Layout following FaceFusion architecture (scale=4, scale=4, scale=7)
@@ -1526,13 +1537,55 @@ with gr.Blocks(title="MonoFace Studio Pro", fill_width=True) as demo:
         cancels=[run_event]
     )
 
+def is_colab() -> bool:
+    return "google.colab" in sys.modules or os.path.exists("/content")
+
+
+def setup_colab_keepalive() -> None:
+    """Configures automatic keep-alive mechanisms for Google Colab environments."""
+    if not is_colab():
+        return
+
+    # 1. Inject JavaScript keepalive directly into the Colab notebook output
+    try:
+        from IPython.display import display, Javascript
+        display(Javascript('''
+            function ColabKeepAlive() {
+                const colabButton = document.querySelector("colab-connect-button");
+                if (colabButton && colabButton.shadowRoot) {
+                    const btn = colabButton.shadowRoot.querySelector("#connect");
+                    if (btn) {
+                        btn.click();
+                        console.log("[MonoFace] Keepalive: Connect button clicked.");
+                    }
+                }
+            }
+            setInterval(ColabKeepAlive, 60000);
+            console.log("[MonoFace] Automatic Colab keepalive activated (60s pulse).");
+        '''))
+    except Exception:
+        pass
+
+    # 2. Start a background heartbeat thread to emit activity and prevent kernel timeout
+    import threading
+    def _heartbeat():
+        while True:
+            time.sleep(120)
+            sys.stdout.flush()
+            print(f"[KEEPALIVE] MonoFace active heartbeat at {time.strftime('%H:%M:%S')} (preventing Colab idle timeout)")
+            sys.stdout.flush()
+
+    heartbeat_thread = threading.Thread(target=_heartbeat, daemon=True)
+    heartbeat_thread.start()
+
+
 if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="MonoFace Studio")
-    parser.add_argument("--share", type=bool, default=False, help="Share the app")
-    parser.add_argument("--inbrowser", type=bool, default=False, help="Open in browser")
-    args = parser.parse_args()
+    parser.add_argument("--share", action="store_true", default=False, help="Share the app")
+    parser.add_argument("--inbrowser", action="store_true", default=False, help="Open in browser")
+    args, _ = parser.parse_known_args()
     
     providers = onnxruntime.get_available_providers()
     print(f"[ONNX] Active ONNX Runtime Execution Providers: {providers}")
@@ -1546,6 +1599,17 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"[INIT] Note: Face analyser models will load on first inference ({e})")
 
+    # Enable Gradio queue for stable WebSocket streaming & long video processing
+    demo.queue(max_size=64)
+
+    is_in_colab = is_colab()
+    if is_in_colab:
+        setup_colab_keepalive()
+        share_mode = True
+        print("[LAUNCH] Google Colab detected: Automatic keep-alive and public sharing enabled.")
+    else:
+        share_mode = args.share
+
     try:
         gr.close_all()
     except Exception:
@@ -1553,18 +1617,22 @@ if __name__ == "__main__":
 
     try:
         demo.launch(
-            share=args.share,
+            share=share_mode,
             inbrowser=args.inbrowser,
             server_name="0.0.0.0",
             server_port=7860,
+            show_error=True,
             theme=get_facefusion_theme(),
-            css=get_facefusion_css()
+            css=get_facefusion_css(),
+            head=get_facefusion_head()
         )
     except OSError:
         print("[LAUNCH] Port 7860 occupied. Falling back to automatically selected open port...")
         demo.launch(
-            share=args.share,
+            share=share_mode,
             inbrowser=args.inbrowser,
+            show_error=True,
             theme=get_facefusion_theme(),
-            css=get_facefusion_css()
+            css=get_facefusion_css(),
+            head=get_facefusion_head()
         )

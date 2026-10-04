@@ -35,13 +35,10 @@ def get_default_providers() -> List[str]:
 
 
 CUDA_PROVIDER_OPTIONS = {
-    'device_id': '0',
+    'device_id': 0,
     'arena_extend_strategy': 'kNextPowerOfTwo',
-    'gpu_mem_limit': '18446744073709551615',
-    'cudnn_conv_algo_search': 'EXHAUSTIVE',
-    'cudnn_conv_use_max_workspace': '1',
-    'do_copy_in_default_stream': '1',
-    'use_tf32': '1'
+    'cudnn_conv_algo_search': 'DEFAULT',
+    'do_copy_in_default_stream': '1'
 }
 
 
